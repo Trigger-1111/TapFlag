@@ -25,7 +25,7 @@ public class FlagZoneDisplay extends BukkitRunnable {
 
     /** 영역 사각형 반변 (중심 → 각 변까지 블록 수) */
     public static final double ZONE_HALF   = 25.0;
-    public static final double DETECT_HALF = 50.0;
+    public static final double DETECT_HALF = 100.0;
 
     private static final double DETECT_HALF_SQ = DETECT_HALF * DETECT_HALF;
 

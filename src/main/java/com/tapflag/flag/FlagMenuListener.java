@@ -104,7 +104,8 @@ public class FlagMenuListener implements Listener {
         // 기타
         BuyEntry.bulk(Material.ARROW,            "화살", 16,            8),
         BuyEntry.of(Material.GOLDEN_APPLE,       "황금 사과",           25),
-        BuyEntry.of(Material.BOOK,               "책",                  10)
+        BuyEntry.of(Material.BOOK,               "책",                  10),
+        BuyEntry.of(Material.EXPERIENCE_BOTTLE,  "경험치 병",            20)
     );
 
     // ─── 메뉴 상태 ───────────────────────────────────────────────────────────
@@ -435,9 +436,11 @@ public class FlagMenuListener implements Listener {
             case 8 -> { // 금고
                 if (team == null) { player.sendMessage(MessageUtil.warn("팀에 속해야 합니다.")); return; }
                 Inventory vaultInv = vaultManager.createInventory(team.getId());
+                // closeInventory() 먼저 → 메인메뉴 close 이벤트 발생 (MAIN 상태 제거, 금고 저장 X)
+                // 그 이후 VAULT 상태 등록 → 실제 금고 close 시에만 저장
+                player.closeInventory();
                 playerMenus.put(player.getUniqueId(),
                     new MenuState(flagId, MenuType.VAULT, List.of(), List.of()));
-                player.closeInventory();
                 player.openInventory(vaultInv);
             }
         }

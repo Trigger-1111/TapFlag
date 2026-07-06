@@ -16,6 +16,8 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 
+import java.util.Set;
+
 /**
  * 게임 중 블록 파괴/설치 제한:
  *  - 깃발 구성 블록(기반암/기둥/배너) 파괴 차단
@@ -26,6 +28,25 @@ import org.bukkit.event.block.BlockPlaceEvent;
 public class BuildListener implements Listener {
 
     private static final double ZONE_HALF = FlagZoneDisplay.ZONE_HALF;
+
+    /** 자기 팀 깃발 영역에만 설치 가능한 블록 목록 */
+    private static final Set<Material> ZONE_ONLY = Set.of(
+        Material.BARREL,
+        Material.ENCHANTING_TABLE,
+        Material.BOOKSHELF,
+        Material.SMITHING_TABLE,
+        // 주민 직업 블록
+        Material.BLAST_FURNACE,
+        Material.SMOKER,
+        Material.CARTOGRAPHY_TABLE,
+        Material.FLETCHING_TABLE,
+        Material.GRINDSTONE,
+        Material.LECTERN,
+        Material.LOOM,
+        Material.STONECUTTER,
+        Material.COMPOSTER,
+        Material.BREWING_STAND
+    );
 
     private final TapFlagPlugin plugin;
     private final GameManager   gameManager;
@@ -67,12 +88,12 @@ public class BuildListener implements Listener {
     public void onBlockPlace(BlockPlaceEvent event) {
         if (!gameManager.isRunning()) return;
 
-        // 통(BARREL) — 자기 팀 깃발 영역에만 설치 허용
-        if (event.getBlock().getType() == Material.BARREL) {
+        // 영역 제한 블록 — 자기 팀 소유 깃발 ZONE_HALF(25블록) 이내에만 설치 허용
+        if (ZONE_ONLY.contains(event.getBlock().getType())) {
             Team team = teamManager.getTeamByPlayer(event.getPlayer().getUniqueId());
             if (team == null) {
                 event.setCancelled(true);
-                event.getPlayer().sendMessage(MessageUtil.warn("팀에 속해야 통을 설치할 수 있습니다."));
+                event.getPlayer().sendMessage(MessageUtil.warn("팀에 속해야 이 블록을 설치할 수 있습니다."));
                 return;
             }
             Location bLoc = event.getBlock().getLocation();
@@ -87,7 +108,7 @@ public class BuildListener implements Listener {
             if (!inZone) {
                 event.setCancelled(true);
                 event.getPlayer().sendMessage(
-                    MessageUtil.warn("통은 자기 팀 깃발 " + (int)ZONE_HALF + "블록 이내에만 설치할 수 있습니다."));
+                    MessageUtil.warn("이 블록은 자기 팀 깃발 " + (int)ZONE_HALF + "블록 이내에만 설치할 수 있습니다."));
             }
             return;
         }
