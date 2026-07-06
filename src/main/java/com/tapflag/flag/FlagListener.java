@@ -43,7 +43,7 @@ public class FlagListener implements Listener {
         if (flagId == null) return;
 
         event.setCancelled(true);
-        applyHit(player, flagId, weaponDamage(player));
+        applyHit(player, flagId, Math.max(1, (int) Math.round(event.getDamage())));
     }
 
     // ─── 블록 직접 좌클릭 (중앙 보완) ────────────────────────────────────────
