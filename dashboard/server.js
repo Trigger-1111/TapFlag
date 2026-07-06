@@ -11,91 +11,89 @@ const RCON_HOST = '127.0.0.1';
 const RCON_PORT = 25575;
 const RCON_PASS = 'tapflag_dev';
 
-// ─── RCON 패킷 ─────────────────────────────────────────────────────────────
 const TYPE_LOGIN   = 3;
 const TYPE_COMMAND = 2;
-const TYPE_RESP    = 0;
+const CMD_ID       = 10;
+const END_ID       = 11;  // 끝 마커용 ID
 
 function buildPacket(id, type, payload) {
-  const body = Buffer.from(payload + '\0\0', 'utf8');
+  const body = Buffer.from(payload + '\x00\x00', 'utf8');
   const buf  = Buffer.allocUnsafe(4 + 4 + 4 + body.length);
-  buf.writeInt32LE(8 + body.length, 0);   // length field
+  buf.writeInt32LE(8 + body.length, 0);
   buf.writeInt32LE(id,   4);
   buf.writeInt32LE(type, 8);
   body.copy(buf, 12);
   return buf;
 }
 
+// RCON: 인증 → 명령 실행 → 마커 명령으로 응답 끝 확인
 function rcon(command) {
   return new Promise((resolve, reject) => {
     const sock = new net.Socket();
     let buf = Buffer.alloc(0);
     let authed = false;
-    const timeout = setTimeout(() => { sock.destroy(); reject(new Error('RCON timeout')); }, 5000);
+    let parts = [];
+    const timer = setTimeout(() => { sock.destroy(); reject(new Error('RCON timeout')); }, 6000);
 
     sock.connect(RCON_PORT, RCON_HOST, () => {
       sock.write(buildPacket(1, TYPE_LOGIN, RCON_PASS));
     });
 
-    sock.on('data', (data) => {
-      buf = Buffer.concat([buf, data]);
+    sock.on('data', (chunk) => {
+      buf = Buffer.concat([buf, chunk]);
       while (buf.length >= 4) {
         const len = buf.readInt32LE(0);
-        if (buf.length < 4 + len) break;
-        const id   = buf.readInt32LE(4);
-        const type = buf.readInt32LE(8);
+        if (len < 10 || buf.length < 4 + len) break;
+        const id      = buf.readInt32LE(4);
         const payload = buf.slice(12, 4 + len - 2).toString('utf8');
         buf = buf.slice(4 + len);
 
         if (!authed) {
-          if (id === -1) { clearTimeout(timeout); sock.destroy(); reject(new Error('RCON auth failed')); return; }
+          if (id === -1) { clearTimeout(timer); sock.destroy(); reject(new Error('RCON 인증 실패 (비밀번호 오류)')); return; }
           authed = true;
-          sock.write(buildPacket(2, TYPE_COMMAND, command));
-        } else {
-          clearTimeout(timeout);
+          sock.write(buildPacket(CMD_ID, TYPE_COMMAND, command));
+          // 마커 명령: 응답이 도착하면 수집 완료
+          sock.write(buildPacket(END_ID, TYPE_COMMAND, 'version'));
+        } else if (id === END_ID) {
+          clearTimeout(timer);
           sock.destroy();
-          resolve(payload);
+          resolve(parts.join(''));
+        } else if (id === CMD_ID && payload.length > 0) {
+          parts.push(payload);
         }
+        // id가 CMD_ID이고 payload가 비어있으면 무시 (일부 Minecraft 서버가 빈 패킷 선송신)
       }
     });
 
-    sock.on('error', (e) => { clearTimeout(timeout); reject(e); });
+    sock.on('error', (e) => { clearTimeout(timer); reject(e); });
+    sock.on('close', () => {
+      if (!authed) { clearTimeout(timer); reject(new Error('RCON 연결 끊김 (서버 꺼짐?)')); }
+    });
   });
 }
 
-// ─── RCON 결과에서 색코드 제거 ───────────────────────────────────────────────
 function stripColor(str) {
-  return str.replace(/§[0-9a-fklmnor]/gi, '');
+  return str.replace(/§[0-9a-fklmnor]/gi, '').replace(/§[0-9a-fklmnor]/gi, '');
 }
 
-// ─── API 라우트 ─────────────────────────────────────────────────────────────
+// ─── API ───────────────────────────────────────────────────────────────────
 
-// 게임 상태 (JSON)
 app.get('/api/status', async (req, res) => {
   try {
-    const raw = await rcon('tapflag apistatus');
+    const raw   = await rcon('tapflag apistatus');
     const clean = stripColor(raw);
-    // RCON 응답에서 JSON 부분만 추출
-    const jsonStart = clean.indexOf('{');
-    if (jsonStart === -1) return res.json({ error: 'no data', raw: clean });
-    const json = JSON.parse(clean.slice(jsonStart));
+    const start = clean.indexOf('{');
+    const end   = clean.lastIndexOf('}');
+    if (start === -1 || end === -1) {
+      return res.status(503).json({ error: 'JSON 없음', raw: clean.slice(0, 200) });
+    }
+    const json = JSON.parse(clean.slice(start, end + 1));
     res.json(json);
   } catch (e) {
     res.status(503).json({ error: e.message });
   }
 });
 
-// 서버 핑 (접속자 수 포함)
-app.get('/api/ping', async (req, res) => {
-  try {
-    const raw = await rcon('list');
-    res.json({ ok: true, message: stripColor(raw) });
-  } catch (e) {
-    res.status(503).json({ ok: false, error: e.message });
-  }
-});
-
-// 타이머 점령 강제 on/off
 app.post('/api/capture', async (req, res) => {
   const { on } = req.body;
   try {
@@ -106,9 +104,9 @@ app.post('/api/capture', async (req, res) => {
   }
 });
 
-// 점령 시간 설정 (게임 타이머 직접 조작)
 app.post('/api/timer/set', async (req, res) => {
-  const { action } = req.body; // 'start' | 'stop'
+  const { action } = req.body;
+  if (!['start', 'stop'].includes(action)) return res.status(400).json({ ok: false });
   try {
     await rcon(`tapflag timer ${action}`);
     res.json({ ok: true });
@@ -117,30 +115,18 @@ app.post('/api/timer/set', async (req, res) => {
   }
 });
 
-// 게임 시작 (playtest)
-app.post('/api/playtest/start', async (req, res) => {
-  try {
-    const players = await rcon('list');
-    // 첫 번째 온라인 플레이어에게 playtest setup 실행 — 단순 구현
-    res.json({ ok: false, message: '플레이테스트는 인게임 /tapflag playtest setup 사용' });
-  } catch (e) {
-    res.status(503).json({ ok: false, error: e.message });
-  }
-});
-
-// 서버 종료
 app.post('/api/shutdown', async (req, res) => {
   try {
     await rcon('stop');
     res.json({ ok: true });
   } catch (e) {
-    // stop 명령 자체가 연결을 끊으므로 에러가 나도 성공으로 처리
-    res.json({ ok: true });
+    res.json({ ok: true }); // stop은 연결 끊기므로 에러여도 성공
   }
 });
 
-// ─── 서버 시작 ─────────────────────────────────────────────────────────────
+// ─── 서버 시작 ──────────────────────────────────────────────────────────────
 const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`TapFlag Dashboard: http://localhost:${PORT}`);
+  console.log(`RCON: ${RCON_HOST}:${RCON_PORT}`);
 });

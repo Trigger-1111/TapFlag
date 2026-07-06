@@ -13,6 +13,7 @@
   #status-dot { width: 10px; height: 10px; border-radius: 50%; background: #3fb950; display: inline-block; margin-left: auto; }
   #status-dot.offline { background: #f85149; }
   #status-label { font-size: 0.8rem; color: #8b949e; }
+  #error-bar { display: none; background: #4a1a1a; border-bottom: 1px solid #f85149; padding: 8px 24px; font-size: 0.8rem; color: #f85149; }
 
   main { padding: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; max-width: 1200px; margin: 0 auto; }
 
@@ -75,6 +76,7 @@
 </head>
 <body>
 
+<div id="error-bar"></div>
 <header>
   <h1>⚑ TapFlag Dashboard</h1>
   <span id="refresh-label" style="font-size:.75rem;color:#8b949e"></span>
@@ -181,9 +183,20 @@ async function fetchStatus() {
     if (data.error) throw new Error(data.error);
     render(data);
     setOnline(true);
+    clearError();
   } catch (e) {
     setOnline(false);
+    showError('서버 연결 실패: ' + e.message);
   }
+}
+
+function showError(msg) {
+  const bar = document.getElementById('error-bar');
+  bar.textContent = '⚠ ' + msg;
+  bar.style.display = 'block';
+}
+function clearError() {
+  document.getElementById('error-bar').style.display = 'none';
 }
 
 function setOnline(ok) {

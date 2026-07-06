@@ -91,7 +91,29 @@ public class FlagListener implements Listener {
     // ─── 무기 데미지 ──────────────────────────────────────────────────────────
 
     private static int weaponDamage(Player player) {
-        AttributeInstance atk = player.getAttribute(Attribute.ATTACK_DAMAGE);
-        return (atk != null) ? Math.max(1, (int) Math.round(atk.getValue())) : 1;
+        return switch (player.getInventory().getItemInMainHand().getType()) {
+            case WOODEN_SWORD, GOLDEN_SWORD             -> 4;
+            case STONE_SWORD                            -> 5;
+            case IRON_SWORD                             -> 6;
+            case DIAMOND_SWORD                          -> 7;
+            case NETHERITE_SWORD                        -> 8;
+            case WOODEN_AXE, GOLDEN_AXE                -> 7;
+            case STONE_AXE, IRON_AXE                   -> 9;
+            case DIAMOND_AXE                           -> 9;
+            case NETHERITE_AXE                         -> 10;
+            case WOODEN_PICKAXE, GOLDEN_PICKAXE        -> 2;
+            case STONE_PICKAXE                         -> 3;
+            case IRON_PICKAXE                          -> 4;
+            case DIAMOND_PICKAXE                       -> 5;
+            case NETHERITE_PICKAXE                     -> 6;
+            case WOODEN_SHOVEL, GOLDEN_SHOVEL          -> 2;
+            case STONE_SHOVEL                          -> 3;
+            case IRON_SHOVEL                           -> 4;
+            case DIAMOND_SHOVEL                        -> 5;
+            case NETHERITE_SHOVEL                      -> 6;
+            case TRIDENT                               -> 9;
+            case MACE                                  -> 6;
+            default                                    -> 1;
+        };
     }
 }

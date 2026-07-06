@@ -321,7 +321,13 @@ public class TapFlagCommand implements CommandExecutor, TabCompleter {
                 if (err != null) {
                     sender.sendMessage(MessageUtil.error(err));
                 } else {
-                    sender.sendMessage(MessageUtil.success("[" + args[2] + "] 팀으로 전환됨."));
+                    sender.sendMessage(MessageUtil.success("[" + args[2] + "] 팀으로 전환됨 (팀장)."));
+                    var t = plugin.getTeamManager().getTeam(args[2]);
+                    if (t != null) {
+                        sender.sendMessage(MessageUtil.info("팀장 UUID: " + t.getLeader()));
+                        sender.sendMessage(MessageUtil.info("내 UUID:   " + p.getUniqueId()));
+                        sender.sendMessage(MessageUtil.info("팀장 일치: " + t.getLeader().equals(p.getUniqueId())));
+                    }
                 }
                 yield true;
             }
