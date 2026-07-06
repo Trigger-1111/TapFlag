@@ -1,0 +1,48 @@
+# Maven 빌드 산출물
+target/
+
+# 마인크래프트 서버 실행 파일 및 런타임 데이터
+Server/*.jar
+Server/*.class
+Server/*.pid
+Server/*.err
+Server/*.log
+Server/libraries/
+Server/versions/
+Server/cache/
+Server/plugins/*.jar
+Server/plugins/*/
+Server/world/
+Server/world_nether/
+Server/world_the_end/
+Server/tap_flag/
+Server/tap_flag_nether/
+Server/tap_flag_the_end/
+Server/map_backup/
+Server/logs/
+Server/crash-reports/
+Server/banned-ips.json
+Server/banned-players.json
+Server/ops.json
+Server/whitelist.json
+Server/usercache.json
+Server/session.lock
+Server/eula.txt
+Server/version_history.json
+Server/help.yml
+Server/permissions.yml
+
+# 내부 메모 파일
+project_context_prompt.md
+
+# 맵 원본 파일 (용량 큼)
+Map/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

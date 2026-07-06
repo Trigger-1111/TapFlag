@@ -1,0 +1,22 @@
+name: TapFlag
+version: ${project.version}
+main: com.tapflag.TapFlagPlugin
+api-version: '1.21'
+authors: [TapFlag]
+description: Minecraft War Server Plugin
+
+softdepend:
+  - Vault
+  - WorldGuard
+  - LiteBans
+
+commands:
+  tapflag:
+    description: TapFlag 관리 명령어
+    usage: /tapflag <subcommand>
+    permission: tapflag.admin
+
+permissions:
+  tapflag.admin:
+    description: TapFlag 관리자 명령어 접근
+    default: op

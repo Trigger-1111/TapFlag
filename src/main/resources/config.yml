@@ -1,0 +1,42 @@
+# 게임 전체 설정
+game:
+  total-duration-seconds: 10800      # 3시간
+  capture-phase-duration-seconds: 3600  # 마지막 1시간만 점령 가능
+
+# 맵 설정 (WorldPainter 맵 수령 후 실제 값으로 교체)
+map:
+  center-x: 0
+  center-z: 0
+  radius: 500      # 플레이 가능 원형 반경 (블록 단위)
+  min-mine-y: -60  # 이 Y 이하 채굴 금지
+  max-build-y: 200 # 이 Y 이상 건축 금지
+
+# 깃발 설정
+flag:
+  max-hp: 300
+  count: 5
+  min-spacing: 80       # 깃발 간 최소 거리 (블록 단위)
+  zone-radius: 50       # 영역 표시 반경 (황금색 파티클)
+  detect-radius: 100    # 감지 영역 반경 (하늘색 파티클)
+
+# 사망 밴 설정
+ban:
+  death-ban-minutes: 20
+  ban-reason: "사망으로 인한 자동 밴"
+  use-litebans: true   # false면 Bukkit 기본 밴 사용
+
+# 점령 불가 시간 디버프
+lockdown:
+  weakness-amplifier: 1
+  fatigue-amplifier: 2
+
+# 광맥 설정
+ore-veins:
+  count: 20        # 게임 당 광맥 수
+  y-min: 15        # 광맥 중심 최소 Y
+  y-max: 55        # 광맥 중심 최대 Y
+  # 광물 분포: IRON 30%, COAL 20%, COPPER 15%, GOLD 12%,
+  #            LAPIS 8%, REDSTONE 8%, DIAMOND 5%, EMERALD 2%
+
+messages:
+  prefix: "&8[&cTapFlag&8] "

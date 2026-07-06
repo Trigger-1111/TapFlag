@@ -1,0 +1,167 @@
+package com.tapflag.team;
+
+import com.tapflag.TapFlagPlugin;
+import org.bukkit.ChatColor;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.*;
+
+public class TeamManager {
+
+    private final TapFlagPlugin plugin;
+    private final Map<String, Team> teams = new HashMap<>();
+    private final Set<UUID> wanderers = new HashSet<>();
+
+    private final File teamsFile;
+    private FileConfiguration teamsConfig;
+
+    public TeamManager(TapFlagPlugin plugin) {
+        this.plugin = plugin;
+        this.teamsFile = new File(plugin.getDataFolder(), "teams.yml");
+        this.teamsConfig = YamlConfiguration.loadConfiguration(teamsFile);
+        load();
+    }
+
+    // ─── 팀 생성 / 해체 ──────────────────────────────────────────────────────
+
+    /** @return 생성된 Team, 이미 id 존재 시 null */
+    public Team createTeam(String id, UUID leader) {
+        if (teams.containsKey(id)) return null;
+        Team team = new Team(id, leader);
+        teams.put(id, team);
+        wanderers.remove(leader);
+        return team;
+    }
+
+    /** 팀 해체 — 멤버 전체를 방랑자로 전환 */
+    public boolean disbandTeam(String teamId) {
+        Team team = teams.remove(teamId);
+        if (team == null) return false;
+        team.setState(TeamState.DISBANDED);
+        wanderers.addAll(team.getMembers());
+        plugin.getLogger().info("Team [" + teamId + "] disbanded. " + team.getMembers().size() + " wanderers added.");
+        return true;
+    }
+
+    // ─── 조회 ────────────────────────────────────────────────────────────────
+
+    public Team getTeam(String teamId)           { return teams.get(teamId); }
+    public Collection<Team> getAllTeams()         { return teams.values(); }
+    public Set<UUID> getWanderers()              { return wanderers; }
+    public boolean isWanderer(UUID uuid)         { return wanderers.contains(uuid); }
+
+    public Team getTeamByPlayer(UUID uuid) {
+        for (Team t : teams.values()) {
+            if (t.containsPlayer(uuid)) return t;
+        }
+        return null;
+    }
+
+    // ─── 멤버 관리 ───────────────────────────────────────────────────────────
+
+    public void addToTeam(String teamId, UUID uuid) {
+        Team team = teams.get(teamId);
+        if (team == null) return;
+        team.addMember(uuid);
+        wanderers.remove(uuid);
+    }
+
+    /** 플레이어를 방랑자로 전환 (팀에서 제거) */
+    public void addToWanderer(UUID uuid) {
+        for (Team team : teams.values()) {
+            team.getMembers().remove(uuid);
+        }
+        wanderers.add(uuid);
+    }
+
+    public void removeFromTeam(String teamId, UUID uuid) {
+        Team team = teams.get(teamId);
+        if (team == null) return;
+        team.getMembers().remove(uuid);
+        wanderers.add(uuid);
+    }
+
+    // ─── 깃발 점령 후처리 ────────────────────────────────────────────────────
+
+    /**
+     * 깃발 점령 시 호출.
+     * 이전 소유팀에서 깃발을 제거하고, 깃발이 0개가 되면 해당 팀을 해체.
+     */
+    public void onFlagCaptured(int flagId, String capturingTeamId) {
+        // 이전 소유팀 처리
+        for (Team team : new ArrayList<>(teams.values())) {
+            if (!team.getId().equals(capturingTeamId) && team.ownsFlag(flagId)) {
+                team.removeFlag(flagId);
+                if (team.getFlagCount() == 0) {
+                    plugin.getServer().broadcastMessage(
+                        ChatColor.RED + "팀 [" + team.getId() + "] 이(가) 모든 깃발을 잃어 해체되었습니다!"
+                    );
+                    disbandTeam(team.getId());
+                }
+                break;
+            }
+        }
+        // 새 소유팀에 깃발 추가
+        Team capturingTeam = teams.get(capturingTeamId);
+        if (capturingTeam != null) capturingTeam.addFlag(flagId);
+    }
+
+    // ─── 영속성 ──────────────────────────────────────────────────────────────
+
+    public void save() {
+        teamsConfig = new YamlConfiguration();
+
+        for (Team team : teams.values()) {
+            String path = "teams." + team.getId();
+            teamsConfig.set(path + ".leader", team.getLeader().toString());
+            List<String> memberList = team.getMembers().stream().map(UUID::toString).toList();
+            teamsConfig.set(path + ".members", memberList);
+            teamsConfig.set(path + ".state", team.getState().name());
+            teamsConfig.set(path + ".flags", new ArrayList<>(team.getOwnedFlagIds()));
+        }
+
+        List<String> wandererList = wanderers.stream().map(UUID::toString).toList();
+        teamsConfig.set("wanderers", wandererList);
+
+        try {
+            teamsConfig.save(teamsFile);
+        } catch (IOException e) {
+            plugin.getLogger().severe("teams.yml 저장 실패: " + e.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public void load() {
+        if (!teamsFile.exists()) return;
+        teamsConfig = YamlConfiguration.loadConfiguration(teamsFile);
+
+        if (teamsConfig.isConfigurationSection("teams")) {
+            for (String teamId : teamsConfig.getConfigurationSection("teams").getKeys(false)) {
+                String path = "teams." + teamId;
+                UUID leader = UUID.fromString(Objects.requireNonNull(teamsConfig.getString(path + ".leader")));
+                Team team = new Team(teamId, leader);
+
+                for (String s : teamsConfig.getStringList(path + ".members")) {
+                    team.addMember(UUID.fromString(s));
+                }
+
+                String stateStr = teamsConfig.getString(path + ".state", "ACTIVE");
+                team.setState(TeamState.valueOf(stateStr));
+
+                List<?> rawFlags = teamsConfig.getList(path + ".flags", List.of());
+                for (Object o : rawFlags) {
+                    if (o instanceof Integer i) team.addFlag(i);
+                }
+
+                teams.put(teamId, team);
+            }
+        }
+
+        for (String s : teamsConfig.getStringList("wanderers")) {
+            wanderers.add(UUID.fromString(s));
+        }
+    }
+}
