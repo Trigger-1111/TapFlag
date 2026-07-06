@@ -11,7 +11,6 @@ import com.tapflag.listener.BuildListener;
 import com.tapflag.listener.CraftListener;
 import com.tapflag.listener.DeathBanListener;
 import com.tapflag.listener.LockdownListener;
-import com.tapflag.listener.MovementLimitListener;
 import com.tapflag.listener.NetherEndListener;
 import com.tapflag.listener.PlayerLoginListener;
 import com.tapflag.team.TeamManager;
@@ -28,7 +27,6 @@ public class TapFlagPlugin extends JavaPlugin {
     private OreManager oreManager;
     private HudManager hudManager;
     private VaultManager vaultManager;
-    private MovementLimitListener movementLimitListener;
 
     @Override
     public void onEnable() {
@@ -53,8 +51,6 @@ public class TapFlagPlugin extends JavaPlugin {
         pm.registerEvents(new BuildListener(this, gameManager, flagManager, teamManager), this);
         pm.registerEvents(new FlagMenuListener(this, flagManager, teamManager, vaultManager), this);
         pm.registerEvents(new CraftListener(), this);
-        movementLimitListener = new MovementLimitListener(gameManager);
-        pm.registerEvents(movementLimitListener, this);
 
         var cmd = new TapFlagCommand(this, teamManager, flagManager, gameTimer, gameManager);
         var tapFlagCmd = getCommand("tapflag");
@@ -82,7 +78,6 @@ public class TapFlagPlugin extends JavaPlugin {
     public FlagManager getFlagManager() { return flagManager; }
     public GameTimer getGameTimer()     { return gameTimer; }
     public GameManager getGameManager() { return gameManager; }
-    public OreManager getOreManager()        { return oreManager; }
-    public HudManager getHudManager()        { return hudManager; }
-    public MovementLimitListener getMovementLimitListener() { return movementLimitListener; }
+    public OreManager getOreManager()  { return oreManager; }
+    public HudManager getHudManager()  { return hudManager; }
 }

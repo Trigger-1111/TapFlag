@@ -8,14 +8,18 @@ import com.tapflag.flag.FlagZoneDisplay;
 import com.tapflag.team.Team;
 import com.tapflag.team.TeamManager;
 import com.tapflag.util.MessageUtil;
+import org.bukkit.HeightMap;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -27,7 +31,12 @@ import java.util.Set;
  */
 public class BuildListener implements Listener {
 
-    private static final double ZONE_HALF = FlagZoneDisplay.ZONE_HALF;
+    private static final double ZONE_HALF    = FlagZoneDisplay.ZONE_HALF;
+    private static final int    DEPTH_LIMIT  = 3;    // 지표면 아래 최대 채굴 깊이
+    private static final int    HEIGHT_LIMIT = 50;   // 지표면 위 최대 건축 높이
+
+    /** X/Z 컬럼별 지표 Y 캐시 */
+    private final Map<Long, Integer> surfaceCache = new HashMap<>();
 
     /** 자기 팀 깃발 영역에만 설치 가능한 블록 목록 */
     private static final Set<Material> ZONE_ONLY = Set.of(
@@ -76,11 +85,14 @@ public class BuildListener implements Listener {
             }
         }
 
-        // Y 범위 제한
-        int minY = plugin.getConfig().getInt("map.min-mine-y", -60);
-        if (loc.getBlockY() < minY) {
-            event.setCancelled(true);
-            event.getPlayer().sendMessage(MessageUtil.warn("Y=" + minY + " 이하로는 채굴할 수 없습니다."));
+        // 지형 기준 채굴 깊이 제한
+        if (!event.getPlayer().isOp()) {
+            int surfaceY = getSurfaceY(loc.getWorld(), loc.getBlockX(), loc.getBlockZ());
+            if (loc.getBlockY() < surfaceY - DEPTH_LIMIT) {
+                event.setCancelled(true);
+                event.getPlayer().sendMessage(
+                    MessageUtil.warn("지표면에서 " + DEPTH_LIMIT + "칸 이하로는 채굴할 수 없습니다."));
+            }
         }
     }
 
@@ -113,10 +125,15 @@ public class BuildListener implements Listener {
             return;
         }
 
-        int maxY = plugin.getConfig().getInt("map.max-build-y", 200);
-        if (event.getBlock().getY() > maxY) {
-            event.setCancelled(true);
-            event.getPlayer().sendMessage(MessageUtil.warn("Y=" + maxY + " 이상으로는 건축할 수 없습니다."));
+        // 지형 기준 건축 높이 제한
+        if (!event.getPlayer().isOp()) {
+            Location bLoc = event.getBlock().getLocation();
+            int surfaceY = getSurfaceY(bLoc.getWorld(), bLoc.getBlockX(), bLoc.getBlockZ());
+            if (bLoc.getBlockY() > surfaceY + HEIGHT_LIMIT) {
+                event.setCancelled(true);
+                event.getPlayer().sendMessage(
+                    MessageUtil.warn("지표면에서 " + HEIGHT_LIMIT + "칸 이상으로는 건축할 수 없습니다."));
+            }
         }
     }
 
@@ -131,5 +148,11 @@ public class BuildListener implements Listener {
         return a.getBlockX() == b.getBlockX()
             && a.getBlockY() == b.getBlockY()
             && a.getBlockZ() == b.getBlockZ();
+    }
+
+    private int getSurfaceY(World world, int x, int z) {
+        long key = ((long) x << 32) | (z & 0xFFFFFFFFL);
+        return surfaceCache.computeIfAbsent(key, k ->
+            world.getHighestBlockYAt(x, z, HeightMap.MOTION_BLOCKING_NO_LEAVES));
     }
 }
