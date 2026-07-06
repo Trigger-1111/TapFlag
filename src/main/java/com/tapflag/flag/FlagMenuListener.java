@@ -20,6 +20,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -144,6 +145,7 @@ public class FlagMenuListener implements Listener {
     @EventHandler
     public void onFlagBlockInteract(PlayerInteractEvent event) {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
+        if (event.getHand() != EquipmentSlot.HAND) return;  // 오프핸드 중복 발사 방지
         Block block = event.getClickedBlock();
         if (block == null) return;
         Integer flagId = flagManager.getFlagIdByBlock(block.getLocation());
@@ -151,6 +153,7 @@ public class FlagMenuListener implements Listener {
         event.setCancelled(true);
         event.setUseInteractedBlock(org.bukkit.event.Event.Result.DENY);
         event.setUseItemInHand(org.bukkit.event.Event.Result.DENY);
+        event.getPlayer().updateInventory();
         openMain(event.getPlayer(), flagId);
     }
 

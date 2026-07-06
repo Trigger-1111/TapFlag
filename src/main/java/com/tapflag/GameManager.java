@@ -133,6 +133,8 @@ public class GameManager {
         flagManager.removeAllFlags();
         flagManager.clearFlagTeamMap();
         oreManager.removeAllVeins();
+        var ml = plugin.getMovementLimitListener();
+        if (ml != null) ml.clearCache();
 
         int released = pendingPlayers.size();
         pendingPlayers.clear();

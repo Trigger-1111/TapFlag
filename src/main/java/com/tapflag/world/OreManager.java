@@ -75,13 +75,13 @@ public class OreManager {
             int surface = world.getHighestBlockYAt(vx, vz, HeightMap.MOTION_BLOCKING_NO_LEAVES);
             int outerR  = 3 + rng.nextInt(3);  // 3~5
 
-            // 중심을 지표 바로 아래에 배치 → 광맥 상단이 지표면에 노출
-            int vy = surface - outerR + 1;
+            // 중심을 지표 위에 배치 → 구 하반구만 땅에 묻히고 상반구가 지상 돌출
+            int vy = surface + 1;
 
             Material ore = ORE_POOL[rng.nextInt(ORE_POOL.length)];
             int oreR = Math.max(1, outerR - 2);
 
-            int replaced = placeVein(world, vx, vy, vz, outerR, oreR, ore);
+            int replaced = placeVein(world, vx, vy, vz, outerR, oreR, ore, surface);
             if (replaced == 0) {
                 skipNoBlocks++;
                 if (skipNoBlocks <= 5) {
@@ -103,9 +103,12 @@ public class OreManager {
             + " skipNoBlocks=" + skipNoBlocks);
     }
 
-    /** 광맥 배치 후 실제 교체된 블록 수를 반환. */
+    /**
+     * 광맥 배치.
+     * surfaceY 이상 위치(공기 포함)도 배치 허용 → 돔 형태로 지상 돌출.
+     */
     private int placeVein(World world, int cx, int cy, int cz,
-                          int outerR, int oreR, Material oreType) {
+                          int outerR, int oreR, Material oreType, int surfaceY) {
         for (int chx = (cx - outerR) >> 4; chx <= (cx + outerR) >> 4; chx++) {
             for (int chz = (cz - outerR) >> 4; chz <= (cz + outerR) >> 4; chz++) {
                 world.getChunkAt(chx, chz).load();
@@ -119,9 +122,20 @@ public class OreManager {
                     double dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
                     if (dist > outerR) continue;
 
-                    Block block = world.getBlockAt(cx + dx, cy + dy, cz + dz);
+                    int blockY = cy + dy;
+                    Block block = world.getBlockAt(cx + dx, blockY, cz + dz);
                     Material orig = block.getType();
-                    if (!canReplace(orig)) continue;
+
+                    if (blockY >= surfaceY) {
+                        // 지표면 이상: 공기에도 배치 (돌출 돔 생성), 특수 블록은 건드리지 않음
+                        if (orig == Material.BEDROCK) continue;
+                        String n = orig.name();
+                        if (n.contains("CHEST") || n.contains("CRAFTING") || n.contains("FURNACE")
+                            || n.contains("SPAWNER") || n.contains("COMMAND") || n.contains("SHULKER")) continue;
+                    } else {
+                        // 지하: 기존 방식
+                        if (!canReplace(orig)) continue;
+                    }
 
                     savedBlocks.putIfAbsent(block.getLocation(), orig);
                     block.setType(dist <= oreR ? oreType : Material.STONE);

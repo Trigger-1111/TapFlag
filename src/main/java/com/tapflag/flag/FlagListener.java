@@ -13,6 +13,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.EquipmentSlot;
 
 /**
  * 깃발 공격 감지:
@@ -42,7 +43,7 @@ public class FlagListener implements Listener {
         if (flagId == null) return;
 
         event.setCancelled(true);
-        applyHit(player, flagId, (int) Math.max(1, Math.round(event.getDamage())));
+        applyHit(player, flagId, weaponDamage(player));
     }
 
     // ─── 블록 직접 좌클릭 (중앙 보완) ────────────────────────────────────────
@@ -50,6 +51,7 @@ public class FlagListener implements Listener {
     @EventHandler
     public void onFlagBlockHit(PlayerInteractEvent event) {
         if (event.getAction() != Action.LEFT_CLICK_BLOCK) return;
+        if (event.getHand() != EquipmentSlot.HAND) return;  // 오프핸드 중복 발사 방지
         Block block = event.getClickedBlock();
         if (block == null) return;
 
