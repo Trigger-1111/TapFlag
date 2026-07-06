@@ -21,7 +21,7 @@ flag:
 
 # 사망 밴 설정
 ban:
-  death-ban-minutes: 20
+  death-ban-minutes: 10
   ban-reason: "사망으로 인한 자동 밴"
   use-litebans: true   # false면 Bukkit 기본 밴 사용
 

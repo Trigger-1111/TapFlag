@@ -2,6 +2,7 @@ package com.tapflag.hud;
 
 import com.tapflag.GameManager;
 import com.tapflag.TapFlagPlugin;
+import com.tapflag.flag.FlagManager;
 import com.tapflag.team.Team;
 import com.tapflag.team.TeamManager;
 import io.papermc.paper.scoreboard.numbers.NumberFormat;
@@ -101,15 +102,32 @@ public class HudManager extends BukkitRunnable implements Listener {
         if (gm == null || !gm.isRunning()) return;
 
         ensureTag(board, "_wanderer_", "§7[방랑자] ", ChatColor.GRAY);
+
+        // 현 팀 + 이전 팀 태그 모두 생성
         for (Team t : teamManager.getAllTeams()) {
             ChatColor c = teamChatColor(t.getId());
-            ensureTag(board, "_" + t.getId() + "_", c + "[" + t.getId() + "] ", c);
+            ensureTag(board, "_" + t.getId() + "_",      c + "[" + t.getId() + "] ", c);
+            ensureTag(board, "_" + t.getId() + "_lead_", c + "★[" + t.getId() + "] ", c);
+        }
+        // 해체 팀의 방랑자용 ex-태그 (5개 고정)
+        for (String teamName : List.of("빨강", "주황", "노랑", "초록", "파랑")) {
+            ChatColor c = teamChatColor(teamName);
+            String eng = toEnglishName(teamName);
+            ensureTag(board, "_ex_" + teamName + "_", c + "[ex-" + eng + "] ", ChatColor.GRAY);
         }
 
         for (Player p : plugin.getServer().getOnlinePlayers()) {
-            Team t     = teamManager.getTeamByPlayer(p.getUniqueId());
-            String key = t == null ? "_wanderer_" : "_" + t.getId() + "_";
-            var tag    = board.getTeam(key);
+            Team t = teamManager.getTeamByPlayer(p.getUniqueId());
+            String key;
+            if (t != null) {
+                key = t.getLeader().equals(p.getUniqueId())
+                    ? "_" + t.getId() + "_lead_"
+                    : "_" + t.getId() + "_";
+            } else {
+                String prev = teamManager.getPreviousTeam(p.getUniqueId());
+                key = (prev != null) ? "_ex_" + prev + "_" : "_wanderer_";
+            }
+            var tag = board.getTeam(key);
             if (tag != null && !tag.hasEntry(p.getName())) {
                 board.getTeams().forEach(bt -> bt.removeEntry(p.getName()));
                 tag.addEntry(p.getName());
@@ -167,11 +185,16 @@ public class HudManager extends BukkitRunnable implements Listener {
         Team myTeam = teamManager.getTeamByPlayer(viewer.getUniqueId());
 
         if (myTeam == null) {
-            // 방랑자
+            String prevTeam = teamManager.getPreviousTeam(viewer.getUniqueId());
             lines.add(Component.text("신분: ", NamedTextColor.WHITE)
                 .append(Component.text("방랑자", NamedTextColor.GRAY)));
+            if (prevTeam != null) {
+                TextColor tc = teamTextColor(prevTeam);
+                lines.add(Component.text("전 소속: ", NamedTextColor.GRAY)
+                    .append(Component.text("ex-" + toEnglishName(prevTeam), tc)));
+            }
             lines.add(sep());
-            lines.add(Component.text("깃발 점령 → 팀 합류", NamedTextColor.YELLOW));
+            lines.add(Component.text("팀원 모집 대기 중", NamedTextColor.YELLOW));
         } else {
             TextColor tc = teamTextColor(myTeam.getId());
 
@@ -184,7 +207,7 @@ public class HudManager extends BukkitRunnable implements Listener {
             // 보유 깃발
             String flags = myTeam.getOwnedFlagIds().isEmpty() ? "없음"
                 : myTeam.getOwnedFlagIds().stream().sorted()
-                    .map(id -> "#" + id).reduce((a, b) -> a + " " + b).orElse("없음");
+                    .map(FlagManager::getDisplayName).reduce((a, b) -> a + " " + b).orElse("없음");
             lines.add(Component.text("깃발: ", NamedTextColor.YELLOW)
                 .append(Component.text(flags, NamedTextColor.WHITE)));
             lines.add(sep());
@@ -208,19 +231,24 @@ public class HudManager extends BukkitRunnable implements Listener {
         Player p    = plugin.getServer().getPlayer(uuid);
         String name = resolveName(uuid);
 
+        // 팀장 여부 확인
+        boolean isLeader = teamManager.getAllTeams().stream()
+            .anyMatch(t -> t.getLeader().equals(uuid));
+        String prefix = isLeader ? "★ " : "  ";
+
         if (p != null && p.isOnline()) {
-            return Component.text("  " + name + " ", NamedTextColor.WHITE)
+            return Component.text(prefix + name + " ", NamedTextColor.WHITE)
                 .append(Component.text("●", NamedTextColor.GREEN));
         }
 
         Long expiry = deathExpiry.get(uuid);
         if (expiry != null && expiry > System.currentTimeMillis()) {
-            return Component.text("  " + name + " ", NamedTextColor.WHITE)
+            return Component.text(prefix + name + " ", NamedTextColor.WHITE)
                 .append(Component.text("✗ " + fmtMs(expiry - System.currentTimeMillis()),
                     NamedTextColor.RED));
         }
 
-        return Component.text("  " + name, NamedTextColor.DARK_GRAY);
+        return Component.text(prefix + name, NamedTextColor.DARK_GRAY);
     }
 
     // ─── 유틸리티 ─────────────────────────────────────────────────────────────
@@ -249,7 +277,18 @@ public class HudManager extends BukkitRunnable implements Listener {
         return op.hasPlayedBefore();
     }
 
-    // ─── 팀 색상 매핑 ─────────────────────────────────────────────────────────
+    // ─── 팀 이름 / 색상 매핑 ──────────────────────────────────────────────────
+
+    static String toEnglishName(String id) {
+        return switch (id) {
+            case "빨강" -> "Red";
+            case "주황" -> "Orange";
+            case "노랑" -> "Yellow";
+            case "초록" -> "Green";
+            case "파랑" -> "Blue";
+            default     -> id;
+        };
+    }
 
     static ChatColor teamChatColor(String id) {
         return switch (id) {

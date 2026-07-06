@@ -150,7 +150,14 @@ public class FlagManager {
 
             // 방랑자(wanderer)가 마지막 타격 → 미리 매핑된 팀으로 합류
             String mappedTeam = flagTeamMap.get(flagId);
-            if (mappedTeam != null && teamManager.getTeam(mappedTeam) != null) {
+            if (mappedTeam != null) {
+                // 팀이 해체된 경우 재창설 (전 팀원이 깃발 재탈환 시)
+                if (teamManager.getTeam(mappedTeam) == null) {
+                    teamManager.createTeam(mappedTeam, attackerUuid);
+                    plugin.getServer().broadcastMessage(
+                        MessageUtil.warn("팀 [" + mappedTeam + "] 이(가) 재창설되었습니다!")
+                    );
+                }
                 teamManager.addToTeam(mappedTeam, attackerUuid);
                 var gm = plugin.getGameManager();
                 if (gm != null) gm.removePending(attackerUuid);
@@ -162,7 +169,7 @@ public class FlagManager {
                 return true;
             }
 
-            // 매핑 없으면 HP 1로 보류
+            // 매핑 없으면 HP 1로 보류 (정상 게임에서는 발생하지 않아야 함)
             flag.setHp(1);
             refreshDisplay(flag);
         }
@@ -184,7 +191,7 @@ public class FlagManager {
         if (capturedTeam != null) capturedTeam.addGold(100);
 
         plugin.getServer().broadcastMessage(
-            MessageUtil.prefix() + ChatColor.GOLD + "깃발 #" + flagId + " 이(가) ["
+            MessageUtil.prefix() + ChatColor.GOLD + "깃발 [" + getDisplayName(flagId) + "] 이(가) ["
             + teamId + "] 팀에 점령되었습니다!"
         );
 
@@ -221,18 +228,32 @@ public class FlagManager {
     // ─── ArmorStand + 블록 관리 ───────────────────────────────────────────────
 
     private void spawnArmorStand(Flag flag) {
-        Location loc = flag.getLocation().clone(); // x+0.5, surfaceY+1, z+0.5
-        loc.add(0, 1.0, 0); // 배너 블록 높이 (surfaceY+2) 에 위치
-        loc.getChunk().load();
+        Location base = flag.getLocation().clone(); // surfaceY+1 (기둥 높이)
+        base.getChunk().load();
+
+        // 1번 스탠드: 기둥 높이 (surfaceY+1) — 이름표 표시
+        ArmorStand stand1 = createRawStand(base);
+        stand1.setCustomNameVisible(true);
+        flag.setArmorStandUuid(stand1.getUniqueId());
+        entityToFlag.put(stand1.getUniqueId(), flag.getId());
+        updateStandName(flag, stand1);
+
+        // 2번 스탠드: 배너 높이 (surfaceY+2) — 추가 히트박스 전용
+        Location bannerLoc = base.clone().add(0, 1, 0);
+        ArmorStand stand2 = createRawStand(bannerLoc);
+        stand2.setCustomNameVisible(false);
+        flag.setArmorStandUuid2(stand2.getUniqueId());
+        entityToFlag.put(stand2.getUniqueId(), flag.getId());
+    }
+
+    private ArmorStand createRawStand(Location loc) {
         ArmorStand stand = (ArmorStand) loc.getWorld().spawnEntity(loc, EntityType.ARMOR_STAND);
-        stand.setVisible(false);       // 블록이 시각 담당, 엔티티는 히트박스 전용
+        stand.setVisible(false);
         stand.setGravity(false);
-        stand.setCustomNameVisible(true);
         stand.setInvulnerable(false);
         stand.setArms(false);
         stand.setBasePlate(false);
-        flag.setArmorStandUuid(stand.getUniqueId());
-        updateStandName(flag, stand);
+        return stand;
     }
 
     /** 기반암(지면) + fence 기둥 + 팀 배너 배치 */
@@ -277,11 +298,18 @@ public class FlagManager {
     }
 
     private void removeFlagFully(Flag flag) {
-        // ArmorStand 제거
+        // ArmorStand 제거 (1번 + 2번)
         if (flag.getArmorStandUuid() != null) {
             entityToFlag.remove(flag.getArmorStandUuid());
             for (World w : plugin.getServer().getWorlds()) {
                 Entity e = w.getEntity(flag.getArmorStandUuid());
+                if (e != null) { e.remove(); break; }
+            }
+        }
+        if (flag.getArmorStandUuid2() != null) {
+            entityToFlag.remove(flag.getArmorStandUuid2());
+            for (World w : plugin.getServer().getWorlds()) {
+                Entity e = w.getEntity(flag.getArmorStandUuid2());
                 if (e != null) { e.remove(); break; }
             }
         }
@@ -310,7 +338,7 @@ public class FlagManager {
             ? ChatColor.WHITE + "중립"
             : ChatColor.GOLD + flag.getOwningTeamId();
         stand.setCustomName(
-            ChatColor.YELLOW + "[깃발 #" + flag.getId() + "] "
+            ChatColor.YELLOW + "[" + getDisplayName(flag.getId()) + "] "
             + ChatColor.RED + flag.getHp() + "/" + flag.getMaxHp() + " "
             + buildHpBar(flag) + " " + teamDisplay
         );
@@ -324,6 +352,38 @@ public class FlagManager {
         }
         bar.append(ChatColor.GREEN + "]");
         return bar.toString();
+    }
+
+    /** 깃발 ID → 영문 표시 이름 */
+    public static String getDisplayName(int flagId) {
+        return switch (flagId) {
+            case 1 -> "Forest";
+            case 2 -> "Ocean";
+            case 3 -> "Mountain";
+            case 4 -> "Center";
+            case 5 -> "Darkforest";
+            default -> "#" + flagId;
+        };
+    }
+
+    /** 블록 위치로 깃발 ID 조회 (기반암/기둥/배너 모두 포함). 없으면 null */
+    public Integer getFlagIdByBlock(Location loc) {
+        for (Map.Entry<Integer, Flag> entry : flags.entrySet()) {
+            Flag f = entry.getValue();
+            if (blockLocEq(f.getGroundBlock(), loc)
+                || blockLocEq(f.getPoleBlock(),   loc)
+                || blockLocEq(f.getBannerBlock(),  loc)) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
+    private static boolean blockLocEq(Location a, Location b) {
+        if (a == null || b == null) return false;
+        return a.getBlockX() == b.getBlockX()
+            && a.getBlockY() == b.getBlockY()
+            && a.getBlockZ() == b.getBlockZ();
     }
 
     /** 팀 ID → 배너 Material 매핑 */
@@ -357,6 +417,8 @@ public class FlagManager {
             flagsConfig.set(path + ".owningTeam", flag.getOwningTeamId());
             if (flag.getArmorStandUuid() != null)
                 flagsConfig.set(path + ".armorStandUuid", flag.getArmorStandUuid().toString());
+            if (flag.getArmorStandUuid2() != null)
+                flagsConfig.set(path + ".armorStandUuid2", flag.getArmorStandUuid2().toString());
             if (flag.getGroundBlock() != null) {
                 Location g = flag.getGroundBlock();
                 flagsConfig.set(path + ".groundBlock.x", g.getBlockX());
@@ -392,22 +454,44 @@ public class FlagManager {
             flag.setHp(flagsConfig.getInt(path + ".hp", maxHp));
             flag.setOwningTeamId(flagsConfig.getString(path + ".owningTeam", null));
 
-            // ArmorStand 복원 또는 재생성
+            // 1번 ArmorStand 복원 또는 재생성
             String uuidStr = flagsConfig.getString(path + ".armorStandUuid");
-            boolean standFound = false;
+            boolean stand1Found = false;
             if (uuidStr != null) {
                 UUID uuid = UUID.fromString(uuidStr);
                 Entity existing = world.getEntity(uuid);
                 if (existing instanceof ArmorStand stand) {
                     flag.setArmorStandUuid(uuid);
+                    stand.setCustomNameVisible(true);
                     updateStandName(flag, stand);
                     entityToFlag.put(uuid, id);
-                    standFound = true;
+                    stand1Found = true;
                 }
             }
-            if (!standFound) {
+            if (!stand1Found) {
+                // spawnArmorStand이 두 스탠드 모두 등록
                 spawnArmorStand(flag);
-                entityToFlag.put(flag.getArmorStandUuid(), id);
+            } else {
+                // 2번 ArmorStand 복원 또는 재생성
+                String uuidStr2 = flagsConfig.getString(path + ".armorStandUuid2");
+                boolean stand2Found = false;
+                if (uuidStr2 != null) {
+                    UUID uuid2 = UUID.fromString(uuidStr2);
+                    Entity existing2 = world.getEntity(uuid2);
+                    if (existing2 instanceof ArmorStand stand2) {
+                        stand2.setCustomNameVisible(false);
+                        flag.setArmorStandUuid2(uuid2);
+                        entityToFlag.put(uuid2, id);
+                        stand2Found = true;
+                    }
+                }
+                if (!stand2Found) {
+                    Location bannerLoc = loc.clone().add(0, 1, 0);
+                    ArmorStand stand2 = createRawStand(bannerLoc);
+                    stand2.setCustomNameVisible(false);
+                    flag.setArmorStandUuid2(stand2.getUniqueId());
+                    entityToFlag.put(stand2.getUniqueId(), id);
+                }
             }
 
             // groundBlock 복원

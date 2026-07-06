@@ -34,7 +34,7 @@ public class GameManager {
     private final Set<UUID> pendingPlayers = new HashSet<>();
 
     private static final List<String> TEAM_NAMES =
-        List.of("빨강", "파랑", "초록", "노랑", "보라", "주황", "하늘", "분홍");
+        List.of("빨강", "주황", "노랑", "초록", "파랑");
 
     private static final int BORDER_SIZE   = 2000;
     private static final double BORDER_BUFFER = 5.0;
@@ -51,37 +51,44 @@ public class GameManager {
     // ─── 게임 시작 ───────────────────────────────────────────────────────────
 
     /**
-     * @param teamCount 팀 수 (= 깃발 수, 최소 2)
+     * @param leaderUuids 팀장 UUID 목록 (2~5명). 각 플레이어가 한 팀의 팀장이 됨.
      * @return 오류 문자열, null이면 성공
      */
-    public String startGame(int teamCount) {
-        return startGame(teamCount, BORDER_SIZE);
+    public String startGame(List<UUID> leaderUuids) {
+        return startGame(leaderUuids, BORDER_SIZE);
     }
 
-    public String startGame(int teamCount, int borderSize) {
+    public String startGame(List<UUID> leaderUuids, int borderSize) {
         if (running) return "이미 게임이 진행 중입니다.";
-        if (teamCount < 2) return "팀 수는 최소 2입니다.";
+        int teamCount = leaderUuids.size();
+        if (teamCount < 2 || teamCount > 5) return "팀장을 2명~5명 지정해야 합니다.";
 
-        // 팀 미리 생성 (비어 있음 — 깃발 점령 시 팀원 합류)
         List<String> names = buildTeamNames(teamCount);
-        UUID dummyLeader = UUID.randomUUID(); // 팀장 자리 placeholder
-        for (String name : names) {
-            teamManager.createTeam(name, dummyLeader);
-        }
 
-        // 전체 온라인 플레이어 → 방랑자
-        for (Player p : plugin.getServer().getOnlinePlayers()) {
-            teamManager.addToWanderer(p.getUniqueId());
-        }
-
-        // 깃발 ID → 팀 매핑 설정
-        Map<Integer, String> flagTeamMap = new HashMap<>();
+        // 팀 생성 + 팀장 합류
         for (int i = 0; i < teamCount; i++) {
-            flagTeamMap.put(i + 1, names.get(i));
+            String teamName = names.get(i);
+            UUID leaderUuid = leaderUuids.get(i);
+            teamManager.createTeam(teamName, leaderUuid);
+            teamManager.addToTeam(teamName, leaderUuid);
         }
+
+        // 비팀장 온라인 플레이어 → pendingPlayers + 강퇴
+        for (Player p : plugin.getServer().getOnlinePlayers()) {
+            if (teamManager.getTeamByPlayer(p.getUniqueId()) == null) {
+                pendingPlayers.add(p.getUniqueId());
+                p.kickPlayer(ChatColor.YELLOW + "게임이 시작되었습니다.\n"
+                    + ChatColor.WHITE + "팀장이 당신을 영입할 때까지 기다려주세요.\n"
+                    + ChatColor.GRAY + "(영입 후 재접속하세요)");
+            }
+        }
+
+        // 깃발 ID → 팀 매핑
+        Map<Integer, String> flagTeamMap = new HashMap<>();
+        for (int i = 0; i < teamCount; i++) flagTeamMap.put(i + 1, names.get(i));
         flagManager.setFlagTeamMap(flagTeamMap);
 
-        // 깃발 배치 (teamCount 개)
+        // 깃발 배치
         flagManager.spawnRandomFlags(teamCount);
 
         // 광맥 생성
@@ -95,9 +102,16 @@ public class GameManager {
         running = true;
         teamManager.save();
 
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < teamCount; i++) {
+            if (i > 0) sb.append(", ");
+            Player lp = plugin.getServer().getPlayer(leaderUuids.get(i));
+            String lname = lp != null ? lp.getName() : leaderUuids.get(i).toString().substring(0, 8);
+            sb.append("[").append(names.get(i)).append("] ").append(lname);
+        }
         plugin.getServer().broadcastMessage(
             MessageUtil.prefix() + ChatColor.GREEN + "" + ChatColor.BOLD
-            + "게임 시작! 깃발을 점령하여 팀에 합류하세요! (팀 수: " + teamCount + ")"
+            + "게임 시작! 팀장: " + sb
         );
 
         var hud = plugin.getHudManager();
@@ -265,6 +279,7 @@ public class GameManager {
 
     public boolean isRunning()              { return running; }
     public boolean isPending(UUID uuid)     { return pendingPlayers.contains(uuid); }
+    public void addPending(UUID uuid)       { pendingPlayers.add(uuid); }
     public void removePending(UUID uuid)    { pendingPlayers.remove(uuid); }
     public Set<UUID> getPendingPlayers()    { return pendingPlayers; }
 

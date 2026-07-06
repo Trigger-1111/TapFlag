@@ -1,6 +1,7 @@
 package com.tapflag.world;
 
 import com.tapflag.TapFlagPlugin;
+import org.bukkit.HeightMap;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -44,6 +45,11 @@ public class OreManager {
 
     // ─── 생성 ─────────────────────────────────────────────────────────────────
 
+    /**
+     * 지상 돌출형 광맥 생성.
+     * 광맥 중심을 surface - outerR + 1 에 배치해 돌(STONE) 껍질이 지표면을 뚫고 나오게 함.
+     * 플레이어가 지표에서 바로 발견/채굴 가능.
+     */
     public void generateVeins() {
         savedBlocks.clear();
         World world = plugin.getServer().getWorlds().get(0);
@@ -53,41 +59,60 @@ public class OreManager {
         int cx     = plugin.getConfig().getInt("map.center-x", 0);
         int cz     = plugin.getConfig().getInt("map.center-z", 0);
         int radius = plugin.getConfig().getInt("map.radius", 500);
-        int yMin   = plugin.getConfig().getInt("ore-veins.y-min", 15);
-        int yMax   = plugin.getConfig().getInt("ore-veins.y-max", 55);
 
-        int placed = 0;
-        for (int attempt = 0; attempt < count * 8 && placed < count; attempt++) {
+        plugin.getLogger().info("[OreManager] generateVeins start: count=" + count
+            + " center=(" + cx + "," + cz + ") radius=" + radius);
+
+        int placed = 0, skipNoBlocks = 0;
+        for (int attempt = 0; attempt < count * 10 && placed < count; attempt++) {
             double angle = rng.nextDouble() * 2 * Math.PI;
-            double r     = radius * (0.15 + rng.nextDouble() * 0.65); // 15~80% 반경
+            double r     = radius * (0.15 + rng.nextDouble() * 0.65);
             int vx = cx + (int)(r * Math.cos(angle));
             int vz = cz + (int)(r * Math.sin(angle));
-            int vy = yMin + rng.nextInt(Math.max(1, yMax - yMin));
 
             world.getChunkAt(vx >> 4, vz >> 4).load();
 
-            int outerR  = 3 + rng.nextInt(3); // 외부 반경 3~5
-            int surface = world.getHighestBlockYAt(vx, vz);
-            if (vy + outerR >= surface - 2) continue; // 지표 노출 방지
+            int surface = world.getHighestBlockYAt(vx, vz, HeightMap.MOTION_BLOCKING_NO_LEAVES);
+            int outerR  = 3 + rng.nextInt(3);  // 3~5
+
+            // 중심을 지표 바로 아래에 배치 → 광맥 상단이 지표면에 노출
+            int vy = surface - outerR + 1;
 
             Material ore = ORE_POOL[rng.nextInt(ORE_POOL.length)];
-            int oreR = Math.max(1, outerR - 2); // 내부 광물 코어 반경
+            int oreR = Math.max(1, outerR - 2);
 
-            placeVein(world, vx, vy, vz, outerR, oreR, ore);
+            int replaced = placeVein(world, vx, vy, vz, outerR, oreR, ore);
+            if (replaced == 0) {
+                skipNoBlocks++;
+                if (skipNoBlocks <= 5) {
+                    Block sample = world.getBlockAt(vx, vy, vz);
+                    plugin.getLogger().info("[OreManager]  skip(noReplace) pos=("
+                        + vx + "," + vy + "," + vz + ") surface=" + surface
+                        + " centerBlock=" + sample.getType());
+                }
+                continue;
+            }
+
+            plugin.getLogger().info("[OreManager]  placed #" + (placed + 1)
+                + " pos=(" + vx + "," + vy + "," + vz + ")"
+                + " surface=" + surface + " outerR=" + outerR
+                + " ore=" + ore + " replaced=" + replaced);
             placed++;
         }
-        plugin.getLogger().info("Ore veins placed: " + placed + "/" + count);
+        plugin.getLogger().info("[OreManager] done: placed=" + placed + "/" + count
+            + " skipNoBlocks=" + skipNoBlocks);
     }
 
-    private void placeVein(World world, int cx, int cy, int cz,
-                           int outerR, int oreR, Material oreType) {
-        // 광맥이 걸치는 모든 청크 미리 로드
+    /** 광맥 배치 후 실제 교체된 블록 수를 반환. */
+    private int placeVein(World world, int cx, int cy, int cz,
+                          int outerR, int oreR, Material oreType) {
         for (int chx = (cx - outerR) >> 4; chx <= (cx + outerR) >> 4; chx++) {
             for (int chz = (cz - outerR) >> 4; chz <= (cz + outerR) >> 4; chz++) {
                 world.getChunkAt(chx, chz).load();
             }
         }
 
+        int count = 0;
         for (int dx = -outerR; dx <= outerR; dx++) {
             for (int dy = -outerR; dy <= outerR; dy++) {
                 for (int dz = -outerR; dz <= outerR; dz++) {
@@ -98,12 +123,13 @@ public class OreManager {
                     Material orig = block.getType();
                     if (!canReplace(orig)) continue;
 
-                    // 원래 블록은 최초 1회만 저장 (겹치는 광맥 대비)
                     savedBlocks.putIfAbsent(block.getLocation(), orig);
                     block.setType(dist <= oreR ? oreType : Material.STONE);
+                    count++;
                 }
             }
         }
+        return count;
     }
 
     // ─── 제거 ─────────────────────────────────────────────────────────────────
@@ -119,10 +145,13 @@ public class OreManager {
     // ─── 내부 ─────────────────────────────────────────────────────────────────
 
     private static boolean canReplace(Material m) {
-        if (!m.isSolid() || m == Material.BEDROCK) return false;
+        // 공기, 액체, 기반암, 특수 블록은 건드리지 않음
+        if (m == Material.AIR || m == Material.CAVE_AIR || m == Material.VOID_AIR) return false;
+        if (m == Material.WATER || m == Material.LAVA) return false;
+        if (m == Material.BEDROCK) return false;
         String n = m.name();
-        return !n.contains("CHEST") && !n.contains("CRAFTING")
-            && !n.contains("FURNACE") && !n.contains("SPAWNER")
-            && !n.contains("COMMAND") && !n.contains("SHULKER");
+        if (n.contains("CHEST") || n.contains("CRAFTING") || n.contains("FURNACE")
+            || n.contains("SPAWNER") || n.contains("COMMAND") || n.contains("SHULKER")) return false;
+        return true;
     }
 }

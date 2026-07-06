@@ -10,7 +10,9 @@ import org.bukkit.ChatColor;
 import org.bukkit.command.*;
 import org.bukkit.entity.Player;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * /tapflag 명령어 트리
@@ -57,14 +59,21 @@ public class TapFlagCommand implements CommandExecutor, TabCompleter {
     // ─── start / stop ────────────────────────────────────────────────────────
 
     private boolean handleStart(CommandSender sender, String[] args) {
-        if (!requireArg(sender, args, 2, "/tapflag start <팀수(최소2)>")) return true;
-        int teamCount = parseInt(sender, args[1]);
-        if (teamCount < 0) return true;
-        if (teamCount < 2) {
-            sender.sendMessage(MessageUtil.error("팀 수는 최소 2입니다."));
+        // /tapflag start <팀장1> <팀장2> [팀장3] [팀장4] [팀장5]
+        if (args.length < 3 || args.length > 6) {
+            sender.sendMessage(MessageUtil.error("사용법: /tapflag start <팀장1> <팀장2> [팀장3] [팀장4] [팀장5]"));
             return true;
         }
-        String error = gameManager.startGame(teamCount);
+        List<UUID> leaders = new ArrayList<>();
+        for (int i = 1; i < args.length; i++) {
+            Player p = plugin.getServer().getPlayer(args[i]);
+            if (p == null) {
+                sender.sendMessage(MessageUtil.error("온라인 플레이어를 찾을 수 없음: " + args[i]));
+                return true;
+            }
+            leaders.add(p.getUniqueId());
+        }
+        String error = gameManager.startGame(leaders);
         if (error != null) sender.sendMessage(MessageUtil.error(error));
         return true;
     }

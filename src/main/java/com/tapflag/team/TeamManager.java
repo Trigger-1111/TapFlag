@@ -14,6 +14,8 @@ public class TeamManager {
     private final TapFlagPlugin plugin;
     private final Map<String, Team> teams = new HashMap<>();
     private final Set<UUID> wanderers = new HashSet<>();
+    /** 방랑자 전환된 플레이어의 이전 팀 ID */
+    private final Map<UUID, String> prevTeamMap = new HashMap<>();
 
     private final File teamsFile;
     private FileConfiguration teamsConfig;
@@ -36,22 +38,31 @@ public class TeamManager {
         return team;
     }
 
-    /** 팀 해체 — 멤버 전체를 방랑자로 전환 */
+    /** 팀 해체 — 멤버 전체를 방랑자로 전환하고 이전 팀 기록 */
     public boolean disbandTeam(String teamId) {
         Team team = teams.remove(teamId);
         if (team == null) return false;
         team.setState(TeamState.DISBANDED);
+        for (UUID member : team.getMembers()) {
+            prevTeamMap.put(member, teamId);
+        }
         wanderers.addAll(team.getMembers());
         plugin.getLogger().info("Team [" + teamId + "] disbanded. " + team.getMembers().size() + " wanderers added.");
+        // teams.yml 즉시 저장 (재접속 시 구 팀 데이터 로드 방지)
+        save();
+        // HUD 즉시 갱신 (방랑자 전환 표시)
+        var hud = plugin.getHudManager();
+        if (hud != null) hud.refreshAll();
         return true;
     }
 
     // ─── 조회 ────────────────────────────────────────────────────────────────
 
-    public Team getTeam(String teamId)           { return teams.get(teamId); }
-    public Collection<Team> getAllTeams()         { return teams.values(); }
-    public Set<UUID> getWanderers()              { return wanderers; }
-    public boolean isWanderer(UUID uuid)         { return wanderers.contains(uuid); }
+    public Team getTeam(String teamId)             { return teams.get(teamId); }
+    public Collection<Team> getAllTeams()           { return teams.values(); }
+    public Set<UUID> getWanderers()                { return wanderers; }
+    public boolean isWanderer(UUID uuid)           { return wanderers.contains(uuid); }
+    public String getPreviousTeam(UUID uuid)       { return prevTeamMap.get(uuid); }
 
     public Team getTeamByPlayer(UUID uuid) {
         for (Team t : teams.values()) {
@@ -67,6 +78,7 @@ public class TeamManager {
         if (team == null) return;
         team.addMember(uuid);
         wanderers.remove(uuid);
+        prevTeamMap.remove(uuid); // 새 팀 합류 시 이전 팀 기록 초기화
     }
 
     /** 플레이어를 방랑자로 전환 (팀에서 제거) */
@@ -126,6 +138,10 @@ public class TeamManager {
         List<String> wandererList = wanderers.stream().map(UUID::toString).toList();
         teamsConfig.set("wanderers", wandererList);
 
+        // 이전 팀 기록 저장
+        prevTeamMap.forEach((uuid, tid) ->
+            teamsConfig.set("prevTeams." + uuid.toString(), tid));
+
         try {
             teamsConfig.save(teamsFile);
         } catch (IOException e) {
@@ -162,6 +178,14 @@ public class TeamManager {
 
         for (String s : teamsConfig.getStringList("wanderers")) {
             wanderers.add(UUID.fromString(s));
+        }
+
+        // 이전 팀 기록 로드
+        if (teamsConfig.isConfigurationSection("prevTeams")) {
+            for (String uuidStr : teamsConfig.getConfigurationSection("prevTeams").getKeys(false)) {
+                String tid = teamsConfig.getString("prevTeams." + uuidStr);
+                if (tid != null) prevTeamMap.put(UUID.fromString(uuidStr), tid);
+            }
         }
     }
 }
