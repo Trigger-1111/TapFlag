@@ -44,14 +44,15 @@ public class TapFlagCommand implements CommandExecutor, TabCompleter {
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (args.length == 0) { sendHelp(sender); return true; }
         return switch (args[0].toLowerCase()) {
-            case "start"    -> handleStart(sender, args);
-            case "stop"     -> handleStop(sender);
-            case "team"     -> handleTeam(sender, args);
-            case "flag"     -> handleFlag(sender, args);
-            case "timer"    -> handleTimer(sender, args);
-            case "status"   -> handleStatus(sender);
-            case "reload"   -> handleReload(sender);
-            case "playtest" -> handlePlaytest(sender, args);
+            case "start"     -> handleStart(sender, args);
+            case "stop"      -> handleStop(sender);
+            case "team"      -> handleTeam(sender, args);
+            case "flag"      -> handleFlag(sender, args);
+            case "timer"     -> handleTimer(sender, args);
+            case "status"    -> handleStatus(sender);
+            case "apistatus" -> handleApiStatus(sender);
+            case "reload"    -> handleReload(sender);
+            case "playtest"  -> handlePlaytest(sender, args);
             default -> { sender.sendMessage(MessageUtil.error("알 수 없는 명령어: " + args[0])); yield true; }
         };
     }
@@ -336,6 +337,53 @@ public class TapFlagCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.YELLOW + "팀 수  : " + teamManager.getAllTeams().size());
         sender.sendMessage(ChatColor.YELLOW + "방랑자 : " + teamManager.getWanderers().size() + "명");
         sender.sendMessage(ChatColor.YELLOW + "깃발   : " + flagManager.getAllFlags().size() + "/" + 5);
+        return true;
+    }
+
+    private boolean handleApiStatus(CommandSender sender) {
+        var teams = teamManager.getAllTeams();
+        var flags = flagManager.getAllFlags();
+        var players = plugin.getServer().getOnlinePlayers();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("{");
+        sb.append("\"running\":").append(gameManager.isRunning()).append(",");
+        sb.append("\"capturePhase\":").append(gameTimer.isCapturePhase()).append(",");
+        sb.append("\"elapsed\":").append(gameTimer.getElapsedSeconds()).append(",");
+        sb.append("\"remaining\":").append(gameTimer.getRemainingSeconds()).append(",");
+        sb.append("\"playerCount\":").append(players.size()).append(",");
+        sb.append("\"players\":[");
+        boolean fp = true;
+        for (var p : players) {
+            if (!fp) sb.append(","); fp = false;
+            var t = teamManager.getTeamByPlayer(p.getUniqueId());
+            sb.append("{\"name\":\"").append(p.getName()).append("\",");
+            sb.append("\"team\":\"").append(t != null ? t.getId() : "방랑자").append("\",");
+            sb.append("\"ping\":").append(p.getPing()).append("}");
+        }
+        sb.append("],\"teams\":[");
+        boolean ft = true;
+        for (var t : teams) {
+            if (!ft) sb.append(","); ft = false;
+            sb.append("{\"id\":\"").append(t.getId()).append("\",");
+            sb.append("\"members\":").append(t.getMembers().size()).append(",");
+            sb.append("\"flags\":").append(t.getFlagCount()).append(",");
+            sb.append("\"gold\":").append(t.getGold()).append("}");
+        }
+        sb.append("],\"flags\":[");
+        boolean ff = true;
+        for (var f : flags.values()) {
+            if (!ff) sb.append(","); ff = false;
+            var loc = f.getLocation();
+            sb.append("{\"id\":").append(f.getId()).append(",");
+            sb.append("\"hp\":").append(f.getHp()).append(",");
+            sb.append("\"maxHp\":").append(f.getMaxHp()).append(",");
+            sb.append("\"team\":\"").append(f.isNeutral() ? "neutral" : f.getOwningTeamId()).append("\",");
+            sb.append("\"x\":").append((int)loc.getX()).append(",");
+            sb.append("\"z\":").append((int)loc.getZ()).append("}");
+        }
+        sb.append("]}");
+        sender.sendMessage(sb.toString());
         return true;
     }
 
