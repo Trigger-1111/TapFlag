@@ -10,7 +10,7 @@ import java.util.UUID;
 public class Team {
 
     private final String id;
-    private final UUID leader;
+    private UUID leader;
     private final Set<UUID> members = new HashSet<>();
     private TeamState state = TeamState.ACTIVE;
     private final Set<Integer> ownedFlagIds = new HashSet<>();
@@ -25,6 +25,7 @@ public class Team {
     // --- 기본 조회 ---
     public String getId()                  { return id; }
     public UUID getLeader()               { return leader; }
+    public void setLeader(UUID uuid)      { leader = uuid; members.add(uuid); }
     public Set<UUID> getMembers()         { return members; }
     public TeamState getState()           { return state; }
     public Set<Integer> getOwnedFlagIds() { return ownedFlagIds; }

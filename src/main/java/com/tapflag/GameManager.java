@@ -227,8 +227,10 @@ public class GameManager {
         } else {
             teamManager.addToWanderer(player.getUniqueId());
         }
-        if (teamManager.getTeam(teamId) == null) return "존재하지 않는 팀: " + teamId;
+        var target = teamManager.getTeam(teamId);
+        if (target == null) return "존재하지 않는 팀: " + teamId;
         teamManager.addToTeam(teamId, player.getUniqueId());
+        target.setLeader(player.getUniqueId());  // 테스트 시 해당 플레이어가 팀장
         return null;
     }
 

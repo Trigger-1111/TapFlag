@@ -88,8 +88,6 @@ public class FlagMenuListener implements Listener {
         BuyEntry.of(Material.IRON_INGOT,          "철 주괴",           15),   // sell 8
         BuyEntry.of(Material.GOLD_INGOT,          "금 주괴",           20),   // sell 12
         BuyEntry.of(Material.DIAMOND,             "다이아몬드",         60),   // sell 40
-        BuyEntry.of(Material.EMERALD,             "에메랄드",           50),   // sell 30
-        BuyEntry.of(Material.NETHERITE_INGOT,     "네더라이트 주괴",   150),
         BuyEntry.of(Material.ENDER_PEARL,         "엔더 진주",         15),
         // 물약 (일반)
         BuyEntry.potion(Material.POTION, PotionType.HEALING,          "회복 물약",       30),
@@ -113,8 +111,10 @@ public class FlagMenuListener implements Listener {
 
     private record MenuState(int flagId, MenuType type, List<UUID> slotUuids, List<Integer> slotFlagIds) {}
 
-    private final Map<UUID, MenuState> playerMenus = new HashMap<>();
-    private final Map<UUID, Long>      tpCooldowns = new HashMap<>();
+    private final Map<UUID, MenuState> playerMenus    = new HashMap<>();
+    private final Map<UUID, Long>      tpCooldowns   = new HashMap<>();
+    /** 금고가 열린 플레이어 → 해당 팀 ID (팀 변경 시 저장 팀 오염 방지) */
+    private final Map<UUID, String>    openVaultTeams = new HashMap<>();
 
     // ─── 의존성 ───────────────────────────────────────────────────────────────
     private final TapFlagPlugin plugin;
@@ -371,16 +371,16 @@ public class FlagMenuListener implements Listener {
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
+
+        // 금고가 열린 경우 완전 자유 조작 (클릭 캔슬 없음)
+        if (openVaultTeams.containsKey(player.getUniqueId())) return;
+
         MenuState state = playerMenus.get(player.getUniqueId());
         if (state == null) return;
 
         String title = event.getView().getTitle();
         if (!title.startsWith(T_MAIN) && !title.equals(T_SHOP)
-            && !title.equals(T_TP)   && !title.equals(T_RECRUIT)
-            && !title.startsWith(T_VAULT)) return;
-
-        // 금고는 자유 조작 허용
-        if (state.type() == MenuType.VAULT) return;
+            && !title.equals(T_TP)   && !title.equals(T_RECRUIT)) return;
 
         event.setCancelled(true);
 
@@ -436,11 +436,8 @@ public class FlagMenuListener implements Listener {
             case 8 -> { // 금고
                 if (team == null) { player.sendMessage(MessageUtil.warn("팀에 속해야 합니다.")); return; }
                 Inventory vaultInv = vaultManager.createInventory(team.getId());
-                // closeInventory() 먼저 → 메인메뉴 close 이벤트 발생 (MAIN 상태 제거, 금고 저장 X)
-                // 그 이후 VAULT 상태 등록 → 실제 금고 close 시에만 저장
-                player.closeInventory();
-                playerMenus.put(player.getUniqueId(),
-                    new MenuState(flagId, MenuType.VAULT, List.of(), List.of()));
+                player.closeInventory();  // MAIN 상태 제거 (close 이벤트 발생)
+                openVaultTeams.put(player.getUniqueId(), team.getId());  // 금고 열림 등록 (팀 ID 고정)
                 player.openInventory(vaultInv);
             }
         }
@@ -539,13 +536,12 @@ public class FlagMenuListener implements Listener {
     @EventHandler
     public void onInventoryClose(InventoryCloseEvent event) {
         if (!(event.getPlayer() instanceof Player player)) return;
-        MenuState state = playerMenus.remove(player.getUniqueId());
+        playerMenus.remove(player.getUniqueId());
 
-        if (state != null && state.type() == MenuType.VAULT) {
-            Team team = teamManager.getTeamByPlayer(player.getUniqueId());
-            if (team != null) {
-                vaultManager.saveVault(team.getId(), event.getInventory());
-            }
+        // 금고 닫힘: 열릴 때 기록한 팀 ID로 저장 (팀 변경과 무관하게 올바른 팀에 저장)
+        String vaultTeamId = openVaultTeams.remove(player.getUniqueId());
+        if (vaultTeamId != null) {
+            vaultManager.saveVault(vaultTeamId, event.getInventory());
         }
     }
 

@@ -86,13 +86,11 @@ public class BuildListener implements Listener {
         }
 
         // 지형 기준 채굴 깊이 제한
-        if (!event.getPlayer().isOp()) {
-            int surfaceY = getSurfaceY(loc.getWorld(), loc.getBlockX(), loc.getBlockZ());
-            if (loc.getBlockY() < surfaceY - DEPTH_LIMIT) {
-                event.setCancelled(true);
-                event.getPlayer().sendMessage(
-                    MessageUtil.warn("지표면에서 " + DEPTH_LIMIT + "칸 이하로는 채굴할 수 없습니다."));
-            }
+        int surfaceY = getSurfaceY(loc.getWorld(), loc.getBlockX(), loc.getBlockZ());
+        if (loc.getBlockY() < surfaceY - DEPTH_LIMIT) {
+            event.setCancelled(true);
+            event.getPlayer().sendMessage(
+                MessageUtil.warn("지표면에서 " + DEPTH_LIMIT + "칸 이하로는 채굴할 수 없습니다."));
         }
     }
 
@@ -126,14 +124,12 @@ public class BuildListener implements Listener {
         }
 
         // 지형 기준 건축 높이 제한
-        if (!event.getPlayer().isOp()) {
-            Location bLoc = event.getBlock().getLocation();
-            int surfaceY = getSurfaceY(bLoc.getWorld(), bLoc.getBlockX(), bLoc.getBlockZ());
-            if (bLoc.getBlockY() > surfaceY + HEIGHT_LIMIT) {
-                event.setCancelled(true);
-                event.getPlayer().sendMessage(
-                    MessageUtil.warn("지표면에서 " + HEIGHT_LIMIT + "칸 이상으로는 건축할 수 없습니다."));
-            }
+        Location bLoc = event.getBlock().getLocation();
+        int surfaceY2 = getSurfaceY(bLoc.getWorld(), bLoc.getBlockX(), bLoc.getBlockZ());
+        if (bLoc.getBlockY() > surfaceY2 + HEIGHT_LIMIT) {
+            event.setCancelled(true);
+            event.getPlayer().sendMessage(
+                MessageUtil.warn("지표면에서 " + HEIGHT_LIMIT + "칸 이상으로는 건축할 수 없습니다."));
         }
     }
 

@@ -5,6 +5,8 @@ import com.tapflag.timer.GameTimer;
 import com.tapflag.util.MessageUtil;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.attribute.Attribute;
+import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.block.Block;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Player;
@@ -89,20 +91,7 @@ public class FlagListener implements Listener {
     // ─── 무기 데미지 ──────────────────────────────────────────────────────────
 
     private static int weaponDamage(Player player) {
-        return switch (player.getInventory().getItemInMainHand().getType()) {
-            case WOODEN_SWORD    -> 4;
-            case STONE_SWORD     -> 5;
-            case IRON_SWORD      -> 6;
-            case GOLDEN_SWORD    -> 4;
-            case DIAMOND_SWORD   -> 7;
-            case NETHERITE_SWORD -> 8;
-            case WOODEN_AXE      -> 7;
-            case STONE_AXE       -> 9;
-            case IRON_AXE        -> 9;
-            case GOLDEN_AXE      -> 7;
-            case DIAMOND_AXE     -> 9;
-            case NETHERITE_AXE   -> 10;
-            default -> 1;
-        };
+        AttributeInstance atk = player.getAttribute(Attribute.ATTACK_DAMAGE);
+        return (atk != null) ? Math.max(1, (int) Math.round(atk.getValue())) : 1;
     }
 }
