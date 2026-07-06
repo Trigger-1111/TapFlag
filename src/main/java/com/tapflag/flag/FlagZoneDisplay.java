@@ -15,17 +15,17 @@ import org.bukkit.scheduler.BukkitRunnable;
  */
 public class FlagZoneDisplay extends BukkitRunnable {
 
-    private static final double ZONE_RADIUS   = 50.0;
-    private static final double DETECT_RADIUS = 100.0;
+    private static final double ZONE_RADIUS   = 25.0;
+    private static final double DETECT_RADIUS = 50.0;
 
-    // 호(arc) 간격 약 4블록 → 원 길이 / 4
-    private static final int ZONE_STEPS   = (int) (2 * Math.PI * ZONE_RADIUS   / 4); // ~78
-    private static final int DETECT_STEPS = (int) (2 * Math.PI * DETECT_RADIUS / 4); // ~157
+    // 호(arc) 간격 약 1.5블록 → 촘촘한 원
+    private static final int ZONE_STEPS   = (int) (2 * Math.PI * ZONE_RADIUS   / 1.5); // ~104
+    private static final int DETECT_STEPS = (int) (2 * Math.PI * DETECT_RADIUS / 1.5); // ~209
 
     private static final Particle.DustOptions ZONE_DUST =
-        new Particle.DustOptions(Color.fromRGB(255, 200, 0), 1.5f);   // 황금
+        new Particle.DustOptions(Color.fromRGB(255, 200, 0), 2.5f);   // 황금 (크기↑)
     private static final Particle.DustOptions DETECT_DUST =
-        new Particle.DustOptions(Color.fromRGB(80, 180, 255), 1.0f);  // 하늘
+        new Particle.DustOptions(Color.fromRGB(80, 180, 255), 2.0f);  // 하늘 (크기↑)
 
     private final FlagManager flagManager;
 

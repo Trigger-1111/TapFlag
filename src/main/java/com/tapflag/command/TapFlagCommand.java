@@ -281,7 +281,7 @@ public class TapFlagCommand implements CommandExecutor, TabCompleter {
 
     private boolean handlePlaytest(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(MessageUtil.error("사용법: /tapflag playtest <setup|stop|skipban|weapon>"));
+            sender.sendMessage(MessageUtil.error("사용법: /tapflag playtest <setup|stop|skipban|jointeam>"));
             return true;
         }
         return switch (args[1].toLowerCase()) {
@@ -301,12 +301,6 @@ public class TapFlagCommand implements CommandExecutor, TabCompleter {
                 if (p == null) yield true;
                 gameManager.removePending(p.getUniqueId());
                 sender.sendMessage(MessageUtil.success("대기 차단 해제: " + p.getName()));
-                yield true;
-            }
-            case "weapon" -> {
-                Player p = requirePlayer(sender);
-                if (p == null) yield true;
-                gameManager.giveTestWeapons(p);
                 yield true;
             }
             case "jointeam" -> {
@@ -391,7 +385,7 @@ public class TapFlagCommand implements CommandExecutor, TabCompleter {
             case "team"     -> filter(List.of("create","list","disband","join","info","recruit"), args[1]);
             case "flag"     -> filter(List.of("place","list","info","hit","capture","reset","remove"), args[1]);
             case "timer"    -> filter(List.of("start","stop","status","capture"), args[1]);
-            case "playtest" -> filter(List.of("setup","stop","skipban","weapon","jointeam"), args[1]);
+            case "playtest" -> filter(List.of("setup","stop","skipban","jointeam"), args[1]);
             default -> List.of();
         };
         if (args.length == 3 && args[0].equals("timer") && args[1].equals("capture"))

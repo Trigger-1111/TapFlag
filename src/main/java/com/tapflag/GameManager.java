@@ -12,7 +12,8 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.WorldBorder;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
+import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
 
@@ -25,6 +26,9 @@ public class GameManager {
     private final OreManager oreManager;
 
     private boolean running = false;
+
+    /** 플레이테스트 1분 토글 태스크 */
+    private BukkitTask playtestToggleTask;
 
     /** 팀원 모집 대기 중 — 로그인 차단 */
     private final Set<UUID> pendingPlayers = new HashSet<>();
@@ -170,6 +174,18 @@ public class GameManager {
         running = true;
         teamManager.save();
 
+        // 1분(1200틱)마다 점령 가능 시간 토글
+        playtestToggleTask = new BukkitRunnable() {
+            @Override public void run() {
+                boolean next = !gameTimer.isCapturePhase();
+                gameTimer.setForceCapture(next);
+                plugin.getServer().broadcastMessage(next
+                    ? MessageUtil.success("[테스트] 점령 가능 시간 시작!")
+                    : MessageUtil.warn("[테스트] 점령 불가 시간 시작!")
+                );
+            }
+        }.runTaskTimer(plugin, 1200L, 1200L);
+
         player.sendMessage(MessageUtil.success("플레이테스트 시작!"));
         player.sendMessage(MessageUtil.info(
             "방랑자 상태입니다. 깃발을 점령하여 팀에 합류하세요."));
@@ -180,6 +196,10 @@ public class GameManager {
     }
 
     public void stopPlaytest() {
+        if (playtestToggleTask != null) {
+            playtestToggleTask.cancel();
+            playtestToggleTask = null;
+        }
         gameTimer.setForceCapture(false);
         stopGame();
     }
@@ -196,14 +216,6 @@ public class GameManager {
         if (teamManager.getTeam(teamId) == null) return "존재하지 않는 팀: " + teamId;
         teamManager.addToTeam(teamId, player.getUniqueId());
         return null;
-    }
-
-    public void giveTestWeapons(Player player) {
-        var inv = player.getInventory();
-        inv.addItem(new ItemStack(Material.DIAMOND_SWORD));
-        inv.addItem(new ItemStack(Material.IRON_AXE));
-        inv.addItem(new ItemStack(Material.STONE_SWORD));
-        player.sendMessage(MessageUtil.info("테스트 무기 지급: 다이아검, 철도끼, 돌검"));
     }
 
     // ─── 팀원 모집 ────────────────────────────────────────────────────────────

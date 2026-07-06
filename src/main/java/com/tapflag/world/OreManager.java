@@ -81,6 +81,13 @@ public class OreManager {
 
     private void placeVein(World world, int cx, int cy, int cz,
                            int outerR, int oreR, Material oreType) {
+        // 광맥이 걸치는 모든 청크 미리 로드
+        for (int chx = (cx - outerR) >> 4; chx <= (cx + outerR) >> 4; chx++) {
+            for (int chz = (cz - outerR) >> 4; chz <= (cz + outerR) >> 4; chz++) {
+                world.getChunkAt(chx, chz).load();
+            }
+        }
+
         for (int dx = -outerR; dx <= outerR; dx++) {
             for (int dy = -outerR; dy <= outerR; dy++) {
                 for (int dz = -outerR; dz <= outerR; dz++) {
