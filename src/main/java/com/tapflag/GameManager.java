@@ -13,7 +13,6 @@ import org.bukkit.World;
 import org.bukkit.WorldBorder;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
 
@@ -27,14 +26,12 @@ public class GameManager {
 
     private boolean running = false;
 
-    /** 플레이테스트 1분 토글 태스크 */
-    private BukkitTask playtestToggleTask;
 
     /** 팀원 모집 대기 중 — 로그인 차단 */
     private final Set<UUID> pendingPlayers = new HashSet<>();
 
     private static final List<String> TEAM_NAMES =
-        List.of("빨강", "주황", "노랑", "초록", "파랑");
+        List.of("Red", "Blue", "Yellow", "Green", "Purple");
 
     private static final int BORDER_SIZE   = 2000;
     private static final double BORDER_BUFFER = 5.0;
@@ -161,7 +158,7 @@ public class GameManager {
     public void startPlaytest(Player player) {
         if (running) stopGame();
 
-        List<String> names = List.of("빨강", "파랑");
+        List<String> names = List.of("Red", "Blue", "Yellow", "Green", "Purple");
         UUID dummy = UUID.randomUUID();
         for (String name : names) teamManager.createTeam(name, dummy);
 
@@ -169,51 +166,37 @@ public class GameManager {
         teamManager.addToWanderer(player.getUniqueId());
 
         // 플래그-팀 매핑
-        Map<Integer, String> map = Map.of(1, "빨강", 2, "파랑");
+        Map<Integer, String> map = Map.of(1, "Red", 2, "Blue", 3, "Yellow", 4, "Green", 5, "Purple");
         flagManager.setFlagTeamMap(map);
 
-        // 깃발 플레이어 주변 배치 (100블록 이상 간격 보장)
+        // 깃발 5개 — 플레이어 기준 반경 300블록, 72° 간격으로 배치
         var base = player.getLocation();
-        flagManager.placeFlag(1, findNearSurface(base,  60, 0));
-        flagManager.placeFlag(2, findNearSurface(base, -60, 0));
+        int[][] offsets = {{300, 0}, {93, 285}, {-243, 176}, {-243, -176}, {93, -285}};
+        for (int i = 0; i < 5; i++) {
+            flagManager.placeFlag(i + 1, findNearSurface(base, offsets[i][0], offsets[i][1]));
+        }
 
         // 광맥 생성 (테스트용)
         oreManager.generateVeins();
 
-        // 월드 보더 (테스트용 소형)
-        applyWorldBorder(400);
+        // 월드 보더 — 본 게임과 동일
+        applyWorldBorder(BORDER_SIZE);
 
-        gameTimer.start();
-        gameTimer.setForceCapture(true);
+        gameTimer.startPlaytest();
         running = true;
         teamManager.save();
 
-        // 1분(1200틱)마다 점령 가능 시간 토글
-        playtestToggleTask = new BukkitRunnable() {
-            @Override public void run() {
-                boolean next = !gameTimer.isCapturePhase();
-                gameTimer.setForceCapture(next);
-                plugin.getServer().broadcastMessage(next
-                    ? MessageUtil.success("[테스트] 점령 가능 시간 시작!")
-                    : MessageUtil.warn("[테스트] 점령 불가 시간 시작!")
-                );
-            }
-        }.runTaskTimer(plugin, 1200L, 1200L);
-
         player.sendMessage(MessageUtil.success("플레이테스트 시작!"));
+        player.sendMessage(MessageUtil.info("방랑자 상태입니다. 깃발을 점령하여 팀에 합류하세요."));
         player.sendMessage(MessageUtil.info(
-            "방랑자 상태입니다. 깃발을 점령하여 팀에 합류하세요."));
+            "깃발: #1→Red, #2→Blue, #3→Yellow, #4→Green, #5→Purple"));
         player.sendMessage(MessageUtil.info(
-            "깃발 #1 → 빨강, 깃발 #2 → 파랑"));
+            "팀 전환: /tapflag playtest jointeam <팀id>"));
         player.sendMessage(MessageUtil.info(
-            "팀 전환 테스트: /tapflag playtest jointeam <팀id>"));
+            "타이머 건너뛰기: /tapflag playtest timer <초>"));
     }
 
     public void stopPlaytest() {
-        if (playtestToggleTask != null) {
-            playtestToggleTask.cancel();
-            playtestToggleTask = null;
-        }
         gameTimer.setForceCapture(false);
         stopGame();
     }

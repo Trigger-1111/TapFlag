@@ -180,15 +180,22 @@ public class FlagManager {
         Flag flag = flags.get(flagId);
         if (flag == null) return;
 
+        boolean wasNeutral = flag.isNeutral();
+        String prevTeamId = flag.getOwningTeamId();
+
+        // 이전 팀의 업그레이드 초기화 (보호막·발리스타·MaxHP 제거)
+        var um = plugin.getFlagUpgradeManager();
+        if (um != null) um.clearFlagUpgrades(flagId, prevTeamId);
+
         flag.setOwningTeamId(teamId);
         flag.resetHp();
         teamManager.onFlagCaptured(flagId, teamId);
         updateBannerColor(flag);
         refreshDisplay(flag);
 
-        // 점령 팀에 금화 지급
+        // 중립 깃발 점령 시에만 포인트 100개 지급
         var capturedTeam = teamManager.getTeam(teamId);
-        if (capturedTeam != null) capturedTeam.addGold(100);
+        if (capturedTeam != null && wasNeutral) capturedTeam.addPoint(100);
 
         plugin.getServer().broadcastMessage(
             MessageUtil.prefix() + ChatColor.GOLD + "깃발 [" + getDisplayName(flagId) + "] 이(가) ["
@@ -322,9 +329,6 @@ public class FlagManager {
         }
     }
 
-    // (구버전 호환 — 외부에서 직접 호출될 수 있는 경우 대비)
-    public void removeArmorStand(Flag flag) { removeFlagFully(flag); }
-
     private void refreshDisplay(Flag flag) {
         if (flag.getArmorStandUuid() == null) return;
         for (World w : plugin.getServer().getWorlds()) {
@@ -390,15 +394,15 @@ public class FlagManager {
     static Material getBannerMaterial(String teamId) {
         if (teamId == null) return Material.WHITE_BANNER;
         return switch (teamId) {
-            case "빨강" -> Material.RED_BANNER;
-            case "파랑" -> Material.BLUE_BANNER;
-            case "초록" -> Material.GREEN_BANNER;
-            case "노랑" -> Material.YELLOW_BANNER;
-            case "보라" -> Material.PURPLE_BANNER;
-            case "주황" -> Material.ORANGE_BANNER;
-            case "하늘" -> Material.CYAN_BANNER;
-            case "분홍" -> Material.PINK_BANNER;
-            default     -> Material.LIGHT_BLUE_BANNER;
+            case "Red",    "빨강" -> Material.RED_BANNER;
+            case "Blue",   "파랑" -> Material.BLUE_BANNER;
+            case "Green",  "초록" -> Material.GREEN_BANNER;
+            case "Yellow", "노랑" -> Material.YELLOW_BANNER;
+            case "Purple", "보라" -> Material.PURPLE_BANNER;
+            case "주황"           -> Material.ORANGE_BANNER;
+            case "하늘"           -> Material.CYAN_BANNER;
+            case "분홍"           -> Material.PINK_BANNER;
+            default              -> Material.LIGHT_BLUE_BANNER;
         };
     }
 

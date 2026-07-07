@@ -291,7 +291,7 @@ public class TapFlagCommand implements CommandExecutor, TabCompleter {
 
     private boolean handlePlaytest(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage(MessageUtil.error("사용법: /tapflag playtest <setup|stop|skipban|jointeam>"));
+            sender.sendMessage(MessageUtil.error("사용법: /tapflag playtest <setup|stop|skipban|jointeam|capture|givefp|timer>"));
             return true;
         }
         return switch (args[1].toLowerCase()) {
@@ -329,6 +329,75 @@ public class TapFlagCommand implements CommandExecutor, TabCompleter {
                         sender.sendMessage(MessageUtil.info("팀장 일치: " + t.getLeader().equals(p.getUniqueId())));
                     }
                 }
+                yield true;
+            }
+            case "capture" -> {
+                if (!requireArg(sender, args, 3, "/tapflag playtest capture <on|off>")) yield true;
+                boolean on = args[2].equalsIgnoreCase("on");
+                gameTimer.setForceCapture(on);
+                plugin.getServer().broadcastMessage(on
+                    ? MessageUtil.success("[테스트] 점령 가능 시간 시작!")
+                    : MessageUtil.warn("[테스트] 점령 불가 시간 시작!"));
+                yield true;
+            }
+            case "givefp" -> {
+                // /tapflag playtest givefp <amount>           → 자신의 팀에 지급
+                // /tapflag playtest givefp <팀id> <amount>   → 특정 팀에 지급
+                if (!requireArg(sender, args, 3, "/tapflag playtest givefp [팀id] <amount>")) yield true;
+
+                String teamId;
+                int amount;
+                if (args.length >= 4) {
+                    // givefp <teamid> <amount>
+                    teamId = args[2];
+                    try { amount = Integer.parseInt(args[3]); }
+                    catch (NumberFormatException e) {
+                        sender.sendMessage(MessageUtil.error("숫자가 아닙니다: " + args[3])); yield true;
+                    }
+                } else {
+                    // givefp <amount> — 자신 팀
+                    Player p = requirePlayer(sender);
+                    if (p == null) yield true;
+                    var t = teamManager.getTeamByPlayer(p.getUniqueId());
+                    if (t == null) { sender.sendMessage(MessageUtil.error("팀에 속해있지 않습니다.")); yield true; }
+                    teamId = t.getId();
+                    try { amount = Integer.parseInt(args[2]); }
+                    catch (NumberFormatException e) {
+                        sender.sendMessage(MessageUtil.error("숫자가 아닙니다: " + args[2])); yield true;
+                    }
+                }
+
+                var target = teamManager.getTeam(teamId);
+                if (target == null) { sender.sendMessage(MessageUtil.error("팀을 찾을 수 없음: " + teamId)); yield true; }
+                target.addFlagpoint(amount);
+                teamManager.save();
+                sender.sendMessage(MessageUtil.success(
+                    "[테스트] [" + teamId + "] 팀에 FP +" + amount + " 지급 (현재: " + target.getFlagpoint() + ")"));
+                yield true;
+            }
+            case "timer" -> {
+                if (!requireArg(sender, args, 3, "/tapflag playtest timer <초>")) yield true;
+                if (!gameManager.isRunning()) {
+                    sender.sendMessage(MessageUtil.warn("게임이 진행 중이 아닙니다.")); yield true;
+                }
+                if (!gameTimer.isPlaytestMode()) {
+                    sender.sendMessage(MessageUtil.warn("플레이테스트 모드에서만 사용 가능합니다.")); yield true;
+                }
+                int seconds;
+                try { seconds = Integer.parseInt(args[2]); }
+                catch (NumberFormatException e) {
+                    sender.sendMessage(MessageUtil.error("숫자를 입력하세요: " + args[2])); yield true;
+                }
+                if (seconds <= 0) {
+                    sender.sendMessage(MessageUtil.error("양수를 입력하세요.")); yield true;
+                }
+                gameTimer.skipTime(seconds);
+                boolean nowCapture = gameTimer.isCapturePhase();
+                int phaseRemaining = gameTimer.getPhaseRemainingSeconds();
+                sender.sendMessage(MessageUtil.success(
+                    "[타이머] " + seconds + "초 건너뜀 → "
+                    + (nowCapture ? ChatColor.GREEN + "점령 가능" : ChatColor.RED + "점령 불가")
+                    + ChatColor.RESET + " | 단계 남은 시간: " + GameTimer.formatTime(phaseRemaining)));
                 yield true;
             }
             default -> { sender.sendMessage(MessageUtil.error("알 수 없는 playtest 명령: " + args[1])); yield true; }
@@ -374,7 +443,8 @@ public class TapFlagCommand implements CommandExecutor, TabCompleter {
             sb.append("{\"id\":\"").append(t.getId()).append("\",");
             sb.append("\"members\":").append(t.getMembers().size()).append(",");
             sb.append("\"flags\":").append(t.getFlagCount()).append(",");
-            sb.append("\"gold\":").append(t.getGold()).append("}");
+            sb.append("\"point\":").append(t.getPoint()).append(",");
+            sb.append("\"flagpoint\":").append(t.getFlagpoint()).append("}");
         }
         sb.append("],\"flags\":[");
         boolean ff = true;
@@ -448,11 +518,25 @@ public class TapFlagCommand implements CommandExecutor, TabCompleter {
             case "team"     -> filter(List.of("create","list","disband","join","info","recruit"), args[1]);
             case "flag"     -> filter(List.of("place","list","info","hit","capture","reset","remove"), args[1]);
             case "timer"    -> filter(List.of("start","stop","status","capture"), args[1]);
-            case "playtest" -> filter(List.of("setup","stop","skipban","jointeam"), args[1]);
+            case "playtest" -> filter(List.of("setup","stop","skipban","jointeam","capture","givefp","timer"), args[1]);
             default -> List.of();
         };
         if (args.length == 3 && args[0].equals("timer") && args[1].equals("capture"))
             return filter(List.of("on","off"), args[2]);
+        if (args.length == 3 && args[0].equals("playtest") && args[1].equals("capture"))
+            return filter(List.of("on","off"), args[2]);
+        if (args.length == 3 && args[0].equals("playtest") && args[1].equals("givefp")) {
+            // 팀 ID 목록 또는 숫자
+            List<String> opts = new ArrayList<>(
+                teamManager.getAllTeams().stream().map(t -> t.getId()).toList()
+            );
+            opts.add("50"); opts.add("100"); opts.add("10");
+            return filter(opts, args[2]);
+        }
+        if (args.length == 4 && args[0].equals("playtest") && args[1].equals("givefp"))
+            return filter(List.of("10","50","100"), args[3]);
+        if (args.length == 3 && args[0].equals("playtest") && args[1].equals("timer"))
+            return filter(List.of("30","60","300","600"), args[2]);
         return List.of();
     }
 

@@ -14,7 +14,11 @@ public class Team {
     private final Set<UUID> members = new HashSet<>();
     private TeamState state = TeamState.ACTIVE;
     private final Set<Integer> ownedFlagIds = new HashSet<>();
-    private int gold = 0;
+    private int point     = 0;   // 상점 재화 (구 금화)
+    private int flagpoint = 0;   // 업그레이드 재화
+
+    /** 점령 단계 중 소유권이 변경된 깃발 — 세션 임시값, 영속하지 않음 */
+    private final Set<Integer> capturePhaseChangedFlags = new HashSet<>();
 
     public Team(String id, UUID leader) {
         this.id = id;
@@ -45,8 +49,22 @@ public class Team {
     public boolean ownsFlag(int flagId){ return ownedFlagIds.contains(flagId); }
     public int getFlagCount()          { return ownedFlagIds.size(); }
 
-    // --- 금화 ---
-    public int  getGold()              { return gold; }
-    public void addGold(int amount)    { gold = Math.max(0, gold + amount); }
-    public void resetGold()            { gold = 0; }
+    // --- 포인트 (상점 재화) ---
+    public int  getPoint()              { return point; }
+    public void addPoint(int amount)    { point = Math.max(0, point + amount); }
+    public void resetPoint()            { point = 0; }
+
+    // --- 플래그포인트 (업그레이드 재화) ---
+    public int  getFlagpoint()          { return flagpoint; }
+    public void addFlagpoint(int amount){ flagpoint = Math.max(0, flagpoint + amount); }
+
+    // --- 안정 점령 추적 (점령 단계 중 소유권 변경) ---
+    public void markFlagChanged(int flagId)   { capturePhaseChangedFlags.add(flagId); }
+    public void clearCapturePhaseChanges()    { capturePhaseChangedFlags.clear(); }
+
+    /** 점령 단계 종료 시 안정적으로 보유한 깃발 수 (변경 없던 것만) */
+    public int getStableFlagCount() {
+        return (int) ownedFlagIds.stream()
+            .filter(id -> !capturePhaseChangedFlags.contains(id)).count();
+    }
 }

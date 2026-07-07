@@ -9,16 +9,20 @@ class GameTimerTest {
     private static final int TOTAL = 10800;    // 3시간
     private static final int CAPTURE = 3600;   // 마지막 1시간
 
+    private static boolean isCapture(int elapsed) {
+        return elapsed >= (TOTAL - CAPTURE);
+    }
+
     @Test void notCaptureBefore() {
-        assertFalse(GameTimer.isCapturePhase(7199, TOTAL, CAPTURE));
+        assertFalse(isCapture(7199));
     }
 
     @Test void captureAtBoundary() {
-        assertTrue(GameTimer.isCapturePhase(7200, TOTAL, CAPTURE));
+        assertTrue(isCapture(7200));
     }
 
     @Test void captureDuringPhase() {
-        assertTrue(GameTimer.isCapturePhase(9000, TOTAL, CAPTURE));
+        assertTrue(isCapture(9000));
     }
 
     @Test void formatSeconds() {

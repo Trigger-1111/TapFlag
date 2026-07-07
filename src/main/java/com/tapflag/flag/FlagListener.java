@@ -2,6 +2,7 @@ package com.tapflag.flag;
 
 import com.tapflag.team.TeamManager;
 import com.tapflag.timer.GameTimer;
+import com.tapflag.upgrade.FlagUpgradeManager;
 import com.tapflag.util.MessageUtil;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -13,6 +14,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.block.BlockDamageEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
@@ -24,14 +26,17 @@ import org.bukkit.inventory.EquipmentSlot;
  */
 public class FlagListener implements Listener {
 
-    private final FlagManager flagManager;
-    private final TeamManager teamManager;
-    private final GameTimer   gameTimer;
+    private final FlagManager        flagManager;
+    private final TeamManager        teamManager;
+    private final GameTimer          gameTimer;
+    private final FlagUpgradeManager upgradeManager;
 
-    public FlagListener(FlagManager flagManager, TeamManager teamManager, GameTimer gameTimer) {
-        this.flagManager = flagManager;
-        this.teamManager = teamManager;
-        this.gameTimer   = gameTimer;
+    public FlagListener(FlagManager flagManager, TeamManager teamManager,
+                        GameTimer gameTimer, FlagUpgradeManager upgradeManager) {
+        this.flagManager    = flagManager;
+        this.teamManager    = teamManager;
+        this.gameTimer      = gameTimer;
+        this.upgradeManager = upgradeManager;
     }
 
     // ─── ArmorStand 피격 (위/아래 영역) ──────────────────────────────────────
@@ -45,7 +50,16 @@ public class FlagListener implements Listener {
         if (flagId == null) return;
 
         event.setCancelled(true);
-        applyHit(player, flagId, Math.max(1, (int) Math.round(event.getDamage())));
+        applyHit(player, flagId, weaponDamage(player));
+    }
+
+    // ─── 깃발 블록 채굴 애니메이션 차단 ──────────────────────────────────────
+
+    @EventHandler
+    public void onFlagBlockDamage(BlockDamageEvent event) {
+        Integer flagId = flagManager.getFlagIdByBlock(event.getBlock().getLocation());
+        if (flagId == null) return;
+        event.setCancelled(true);  // 채굴 애니메이션(블록 균열) 방지
     }
 
     // ─── 블록 직접 좌클릭 (중앙 보완) ────────────────────────────────────────
@@ -67,6 +81,7 @@ public class FlagListener implements Listener {
     // ─── 공통 히트 처리 ───────────────────────────────────────────────────────
 
     private void applyHit(Player player, int flagId, int damage) {
+        if (player.getAttackCooldown() < 0.9f) return;
         if (!gameTimer.isCapturePhase()) {
             player.sendMessage(MessageUtil.warn("현재 점령 불가 시간입니다."));
             return;
@@ -77,6 +92,14 @@ public class FlagListener implements Listener {
         var team = teamManager.getTeamByPlayer(player.getUniqueId());
         if (team != null && flag.isOwnedBy(team.getId())) {
             player.sendMessage(MessageUtil.warn("자신의 팀 깃발은 공격할 수 없습니다."));
+            return;
+        }
+
+        // 보호막 활성화 시: 깃발 직접 피격 불가
+        if (upgradeManager.hasActiveShield(flagId)) {
+            player.sendMessage(ChatColor.AQUA + "⚔ 보호막이 활성화되어 있습니다! (HP: "
+                + upgradeManager.getShieldCurrentHp(flagId) + "/"
+                + upgradeManager.getShieldMaxHp(flagId) + ")");
             return;
         }
 

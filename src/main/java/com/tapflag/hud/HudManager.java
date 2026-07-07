@@ -25,7 +25,7 @@ import java.util.*;
 /**
  * HUD 통합 관리자.
  *  - 이름표 위 팀/방랑자 프리픽스 (Scoreboard Team)
- *  - 우측 사이드바: 팀·깃발·팀원 생존·금화
+ *  - 우측 사이드바: 팀·깃발·팀원 생존·포인트·FP
  *  - 1초 주기 갱신 (BukkitRunnable)
  */
 @SuppressWarnings("UnstableApiUsage")
@@ -110,10 +110,9 @@ public class HudManager extends BukkitRunnable implements Listener {
             ensureTag(board, "_" + t.getId() + "_lead_", c + "★[" + t.getId() + "] ", c);
         }
         // 해체 팀의 방랑자용 ex-태그 (5개 고정)
-        for (String teamName : List.of("빨강", "주황", "노랑", "초록", "파랑")) {
+        for (String teamName : List.of("Red", "Blue", "Yellow", "Green", "Purple")) {
             ChatColor c = teamChatColor(teamName);
-            String eng = toEnglishName(teamName);
-            ensureTag(board, "_ex_" + teamName + "_", c + "[ex-" + eng + "] ", ChatColor.GRAY);
+            ensureTag(board, "_ex_" + teamName + "_", c + "[ex-" + teamName + "] ", ChatColor.GRAY);
         }
 
         for (Player p : plugin.getServer().getOnlinePlayers()) {
@@ -175,56 +174,97 @@ public class HudManager extends BukkitRunnable implements Listener {
         List<Component> lines = new ArrayList<>();
         GameManager gm = plugin.getGameManager();
 
-        lines.add(sep());
-
         if (gm == null || !gm.isRunning()) {
             lines.add(Component.text("게임 대기 중", NamedTextColor.GRAY));
             return lines;
         }
 
+        // 모두에게: 깃발 점령 현황
+        lines.add(buildFlagStatusLine());
+        lines.add(sep());
+
         Team myTeam = teamManager.getTeamByPlayer(viewer.getUniqueId());
 
         if (myTeam == null) {
-            String prevTeam = teamManager.getPreviousTeam(viewer.getUniqueId());
-            lines.add(Component.text("신분: ", NamedTextColor.WHITE)
-                .append(Component.text("방랑자", NamedTextColor.GRAY)));
-            if (prevTeam != null) {
-                TextColor tc = teamTextColor(prevTeam);
-                lines.add(Component.text("전 소속: ", NamedTextColor.GRAY)
-                    .append(Component.text("ex-" + toEnglishName(prevTeam), tc)));
+            String prev = teamManager.getPreviousTeam(viewer.getUniqueId());
+            if (prev != null) {
+                TextColor tc = teamTextColor(prev);
+                lines.add(Component.text("방랑자  ", NamedTextColor.GRAY)
+                    .append(Component.text("ex-" + prev, tc)));
+            } else {
+                lines.add(Component.text("방랑자", NamedTextColor.GRAY));
             }
-            lines.add(sep());
-            lines.add(Component.text("팀원 모집 대기 중", NamedTextColor.YELLOW));
         } else {
             TextColor tc = teamTextColor(myTeam.getId());
 
-            // 팀명
-            lines.add(Component.text("팀: [", NamedTextColor.WHITE)
-                .append(Component.text(myTeam.getId(), tc))
-                .append(Component.text("]", NamedTextColor.WHITE)));
-            lines.add(sep());
+            // [팀명]  포인트pt  FP개
+            lines.add(
+                Component.text("[", NamedTextColor.WHITE)
+                    .append(Component.text(myTeam.getId(), tc))
+                    .append(Component.text("]  ", NamedTextColor.WHITE))
+                    .append(Component.text(myTeam.getPoint() + "pt", NamedTextColor.GOLD))
+                    .append(Component.text("  ", NamedTextColor.DARK_GRAY))
+                    .append(Component.text(myTeam.getFlagpoint() + "FP", NamedTextColor.LIGHT_PURPLE))
+            );
 
             // 보유 깃발
-            String flags = myTeam.getOwnedFlagIds().isEmpty() ? "없음"
+            String ownedStr = myTeam.getOwnedFlagIds().isEmpty()
+                ? "없음"
                 : myTeam.getOwnedFlagIds().stream().sorted()
-                    .map(FlagManager::getDisplayName).reduce((a, b) -> a + " " + b).orElse("없음");
+                    .map(id -> "#" + id).reduce((a, b) -> a + " " + b).orElse("없음");
             lines.add(Component.text("깃발: ", NamedTextColor.YELLOW)
-                .append(Component.text(flags, NamedTextColor.WHITE)));
-            lines.add(sep());
+                .append(Component.text(ownedStr, NamedTextColor.WHITE)));
 
             // 팀원 생존 상태
-            lines.add(Component.text("팀원:", NamedTextColor.GREEN));
             for (UUID uuid : myTeam.getMembers()) {
                 if (isRealPlayer(uuid)) lines.add(memberLine(uuid));
             }
-            lines.add(sep());
-
-            // 금화
-            lines.add(Component.text("금화: ", NamedTextColor.GOLD)
-                .append(Component.text(myTeam.getGold() + "개", NamedTextColor.WHITE)));
         }
 
         return lines;
+    }
+
+    /** 전체 깃발 점령 현황 한 줄: #1[R] #2[B] #3[-] ... */
+    private Component buildFlagStatusLine() {
+        var fm = plugin.getFlagManager();
+        if (fm == null || fm.getAllFlags().isEmpty()) {
+            return Component.text("깃발 없음", NamedTextColor.GRAY);
+        }
+
+        Component line = Component.empty();
+        boolean first = true;
+        for (int id : fm.getAllFlags().keySet().stream().sorted().toList()) {
+            if (!first) line = line.append(Component.text(" ", NamedTextColor.DARK_GRAY));
+            first = false;
+
+            var flag = fm.getAllFlags().get(id);
+            String teamId = flag.getOwningTeamId();
+
+            if (flag.isNeutral() || teamId == null) {
+                line = line
+                    .append(Component.text("#" + id, NamedTextColor.GRAY))
+                    .append(Component.text("[-]", NamedTextColor.DARK_GRAY));
+            } else {
+                TextColor flagTc = teamTextColor(teamId);
+                line = line
+                    .append(Component.text("#" + id, NamedTextColor.WHITE))
+                    .append(Component.text("[", NamedTextColor.DARK_GRAY))
+                    .append(Component.text(teamAbbr(teamId), flagTc))
+                    .append(Component.text("]", NamedTextColor.DARK_GRAY));
+            }
+        }
+        return line;
+    }
+
+    private static String teamAbbr(String id) {
+        return switch (id) {
+            case "Red"    -> "R";
+            case "Blue"   -> "B";
+            case "Yellow" -> "Y";
+            case "Green"  -> "G";
+            case "Purple" -> "P";
+            default       -> id.isEmpty() ? "?" : String.valueOf(id.charAt(0)).toUpperCase();
+        };
     }
 
     private Component memberLine(UUID uuid) {
@@ -254,7 +294,7 @@ public class HudManager extends BukkitRunnable implements Listener {
     // ─── 유틸리티 ─────────────────────────────────────────────────────────────
 
     private Component sep() {
-        return Component.text("──────────────", NamedTextColor.DARK_GRAY);
+        return Component.text("──────────", NamedTextColor.DARK_GRAY);
     }
 
     private static String fmtMs(long ms) {
@@ -279,42 +319,31 @@ public class HudManager extends BukkitRunnable implements Listener {
 
     // ─── 팀 이름 / 색상 매핑 ──────────────────────────────────────────────────
 
-    static String toEnglishName(String id) {
-        return switch (id) {
-            case "빨강" -> "Red";
-            case "주황" -> "Orange";
-            case "노랑" -> "Yellow";
-            case "초록" -> "Green";
-            case "파랑" -> "Blue";
-            default     -> id;
-        };
-    }
-
     static ChatColor teamChatColor(String id) {
         return switch (id) {
-            case "빨강" -> ChatColor.RED;
-            case "파랑" -> ChatColor.BLUE;
-            case "초록" -> ChatColor.GREEN;
-            case "노랑" -> ChatColor.YELLOW;
-            case "보라" -> ChatColor.DARK_PURPLE;
-            case "주황" -> ChatColor.GOLD;
-            case "하늘" -> ChatColor.AQUA;
-            case "분홍" -> ChatColor.LIGHT_PURPLE;
-            default     -> ChatColor.WHITE;
+            case "Red",    "빨강" -> ChatColor.RED;
+            case "Blue",   "파랑" -> ChatColor.BLUE;
+            case "Green",  "초록" -> ChatColor.GREEN;
+            case "Yellow", "노랑" -> ChatColor.YELLOW;
+            case "Purple", "보라" -> ChatColor.DARK_PURPLE;
+            case "주황"           -> ChatColor.GOLD;
+            case "하늘"           -> ChatColor.AQUA;
+            case "분홍"           -> ChatColor.LIGHT_PURPLE;
+            default              -> ChatColor.WHITE;
         };
     }
 
     static TextColor teamTextColor(String id) {
         return switch (id) {
-            case "빨강" -> NamedTextColor.RED;
-            case "파랑" -> NamedTextColor.BLUE;
-            case "초록" -> NamedTextColor.GREEN;
-            case "노랑" -> NamedTextColor.YELLOW;
-            case "보라" -> NamedTextColor.DARK_PURPLE;
-            case "주황" -> NamedTextColor.GOLD;
-            case "하늘" -> NamedTextColor.AQUA;
-            case "분홍" -> NamedTextColor.LIGHT_PURPLE;
-            default     -> NamedTextColor.WHITE;
+            case "Red",    "빨강" -> NamedTextColor.RED;
+            case "Blue",   "파랑" -> NamedTextColor.BLUE;
+            case "Green",  "초록" -> NamedTextColor.GREEN;
+            case "Yellow", "노랑" -> NamedTextColor.YELLOW;
+            case "Purple", "보라" -> NamedTextColor.DARK_PURPLE;
+            case "주황"           -> NamedTextColor.GOLD;
+            case "하늘"           -> NamedTextColor.AQUA;
+            case "분홍"           -> NamedTextColor.LIGHT_PURPLE;
+            default              -> NamedTextColor.WHITE;
         };
     }
 }

@@ -103,10 +103,15 @@ public class TeamManager {
      * 이전 소유팀에서 깃발을 제거하고, 깃발이 0개가 되면 해당 팀을 해체.
      */
     public void onFlagCaptured(int flagId, String capturingTeamId) {
+        var gameTimer = plugin.getGameTimer();
+
         // 이전 소유팀 처리
         for (Team team : new ArrayList<>(teams.values())) {
             if (!team.getId().equals(capturingTeamId) && team.ownsFlag(flagId)) {
                 team.removeFlag(flagId);
+                if (gameTimer != null && gameTimer.isCapturePhase()) {
+                    team.markFlagChanged(flagId); // 점령 단계 중 뺏긴 깃발
+                }
                 if (team.getFlagCount() == 0) {
                     plugin.getServer().broadcastMessage(
                         ChatColor.RED + "팀 [" + team.getId() + "] 이(가) 모든 깃발을 잃어 해체되었습니다!"
@@ -118,7 +123,12 @@ public class TeamManager {
         }
         // 새 소유팀에 깃발 추가
         Team capturingTeam = teams.get(capturingTeamId);
-        if (capturingTeam != null) capturingTeam.addFlag(flagId);
+        if (capturingTeam != null) {
+            capturingTeam.addFlag(flagId);
+            if (gameTimer != null && gameTimer.isCapturePhase()) {
+                capturingTeam.markFlagChanged(flagId); // 점령 단계 중 새로 점령한 깃발
+            }
+        }
     }
 
     // ─── 영속성 ──────────────────────────────────────────────────────────────
@@ -133,6 +143,8 @@ public class TeamManager {
             teamsConfig.set(path + ".members", memberList);
             teamsConfig.set(path + ".state", team.getState().name());
             teamsConfig.set(path + ".flags", new ArrayList<>(team.getOwnedFlagIds()));
+            teamsConfig.set(path + ".point", team.getPoint());
+            teamsConfig.set(path + ".flagpoint", team.getFlagpoint());
         }
 
         List<String> wandererList = wanderers.stream().map(UUID::toString).toList();
@@ -171,6 +183,9 @@ public class TeamManager {
                 for (Object o : rawFlags) {
                     if (o instanceof Integer i) team.addFlag(i);
                 }
+
+                team.addPoint(teamsConfig.getInt(path + ".point", 0));
+                team.addFlagpoint(teamsConfig.getInt(path + ".flagpoint", 0));
 
                 teams.put(teamId, team);
             }

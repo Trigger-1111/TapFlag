@@ -14,14 +14,16 @@ public class Flag {
     private Location bannerBlock;   // 깃발 배너 블록 좌표 (BANNER)
     private int hp;
     private int maxHp;
-    private int upgradeCount = 0;
     private String owningTeamId;    // null = 중립
     private UUID armorStandUuid;
     private UUID armorStandUuid2; // 배너 높이 추가 히트박스
 
+    private final int baseMaxHp;
+
     public Flag(int id, Location location, int maxHp) {
         this.id = id;
         this.location = location;
+        this.baseMaxHp = maxHp;
         this.maxHp = maxHp;
         this.hp = maxHp;
     }
@@ -53,8 +55,8 @@ public class Flag {
     public void setArmorStandUuid2(UUID uuid)        { this.armorStandUuid2 = uuid; }
     public void setHp(int hp)                        { this.hp = Math.max(0, Math.min(maxHp, hp)); }
     public void resetHp()                           { this.hp = maxHp; }
-    public int getUpgradeCount()                   { return upgradeCount; }
-    public void upgradeMaxHp(int amount)           { maxHp += amount; upgradeCount++; }
+    public int  getBaseMaxHp()                     { return baseMaxHp; }
+    public void setMaxHp(int newMax)               { maxHp = newMax; hp = Math.min(hp, maxHp); }
 
     /** @return true 이면 HP 0 → 점령 트리거 */
     public boolean damage(int amount) {

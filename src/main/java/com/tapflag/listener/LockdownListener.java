@@ -21,16 +21,16 @@ import org.bukkit.scheduler.BukkitRunnable;
  */
 public class LockdownListener implements Listener {
 
-    private static final int    TICK_INTERVAL  = 80;   // 4초마다 재적용
-    private static final int    DURATION       = 100;  // 효과 지속 5초
-    private static final double DETECT_HALF_SQ =
-        FlagZoneDisplay.DETECT_HALF * FlagZoneDisplay.DETECT_HALF;
+    private static final int TICK_INTERVAL = 80;   // 4초마다 재적용
+    private static final int DURATION      = 100;  // 효과 지속 5초
 
     private final TapFlagPlugin plugin;
     private final GameTimer     gameTimer;
     private final GameManager   gameManager;
     private final FlagManager   flagManager;
     private final TeamManager   teamManager;
+    private final int           weakAmp;
+    private final int           fatigueAmp;
 
     public LockdownListener(TapFlagPlugin plugin, GameTimer gameTimer,
                             GameManager gameManager,
@@ -40,6 +40,8 @@ public class LockdownListener implements Listener {
         this.gameManager = gameManager;
         this.flagManager = flagManager;
         this.teamManager = teamManager;
+        this.weakAmp    = plugin.getConfig().getInt("lockdown.weakness-amplifier", 1);
+        this.fatigueAmp = plugin.getConfig().getInt("lockdown.fatigue-amplifier",  2);
         startScheduler();
     }
 
@@ -57,8 +59,8 @@ public class LockdownListener implements Listener {
                         p.removePotionEffect(PotionEffectType.MINING_FATIGUE);
                     } else {
                         // 점령 불가 시간 + 적 감지영역 내 → 최대 디버프
-                        p.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS,     DURATION, 127, true, false));
-                        p.addPotionEffect(new PotionEffect(PotionEffectType.MINING_FATIGUE, DURATION, 127, true, false));
+                        p.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS,     DURATION, weakAmp, true, false));
+                        p.addPotionEffect(new PotionEffect(PotionEffectType.MINING_FATIGUE, DURATION, fatigueAmp, true, false));
                     }
                 }
             }
@@ -71,8 +73,8 @@ public class LockdownListener implements Listener {
         Player p = event.getPlayer();
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
             if (isInEnemyDetectZone(p)) {
-                p.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS,     DURATION, 127, true, false));
-                p.addPotionEffect(new PotionEffect(PotionEffectType.MINING_FATIGUE, DURATION, 127, true, false));
+                p.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS,     DURATION, weakAmp, true, false));
+                p.addPotionEffect(new PotionEffect(PotionEffectType.MINING_FATIGUE, DURATION, fatigueAmp, true, false));
             }
         }, 20L);
     }
@@ -84,7 +86,7 @@ public class LockdownListener implements Listener {
             if (flag.isNeutral()) continue;
             boolean isEnemy = (pTeam == null) || !flag.isOwnedBy(pTeam.getId());
             if (!isEnemy) continue;
-            if (p.getLocation().distanceSquared(flag.getLocation()) <= DETECT_HALF_SQ) return true;
+            if (p.getLocation().distanceSquared(flag.getLocation()) <= FlagZoneDisplay.DETECT_HALF * FlagZoneDisplay.DETECT_HALF) return true;
         }
         return false;
     }

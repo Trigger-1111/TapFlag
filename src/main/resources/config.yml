@@ -23,7 +23,6 @@ flag:
 ban:
   death-ban-minutes: 10
   ban-reason: "사망으로 인한 자동 밴"
-  use-litebans: true   # false면 Bukkit 기본 밴 사용
 
 # 점령 불가 시간 디버프
 lockdown:
@@ -33,8 +32,6 @@ lockdown:
 # 광맥 설정
 ore-veins:
   count: 20        # 게임 당 광맥 수
-  y-min: 15        # 광맥 중심 최소 Y
-  y-max: 55        # 광맥 중심 최대 Y
   # 광물 분포: IRON 30%, COAL 20%, COPPER 15%, GOLD 12%,
   #            LAPIS 8%, REDSTONE 8%, DIAMOND 5%, EMERALD 2%
 
